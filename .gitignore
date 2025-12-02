@@ -1,0 +1,31 @@
+# --- Python general ---
+__pycache__/
+*.pyc
+
+# --- Project data (large, private, unnecessary) ---
+data/
+models/
+
+# --- Jupyter ---
+*.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# --- Audio / Generated features ---
+*.wav
+*.mp3
+*.npy
+*.pkl
+*.pt
+*.pth
+*.tflite
+
+# --- Zip archives / dataset packages ---
+*.zip
+
+# --- Logs / cache ---
+logs/
+*.log
+
+# --- Temporary files ---
+.DS_Store
+.env
