@@ -1,0 +1,136 @@
+import os
+import sys
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+# === 添加项目根路径 ===
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+from src.train.dataset import HeartSoundDataset
+from src.model.audio_transformer import AudioTransformer
+
+
+# === 超参数 ===
+BATCH_SIZE = 16
+EPOCHS = 25
+LR = 1e-3
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "best_transformer.pth")
+
+
+# ==============================
+#   Train / Val / Test  函数
+# ==============================
+
+def train_one_epoch(model, loader, criterion, optimizer):
+    model.train()
+    running_loss, correct, total = 0.0, 0, 0
+
+    for mels, labels in tqdm(loader, desc="Training", leave=False):
+        mels, labels = mels.to(DEVICE), labels.to(DEVICE)
+
+        optimizer.zero_grad()
+        outputs = model(mels)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item() * mels.size(0)
+        preds = outputs.argmax(1)
+        correct += (preds == labels).sum().item()
+        total += labels.size(0)
+
+    return running_loss / total, correct / total
+
+
+@torch.no_grad()
+def evaluate(model, loader, criterion, desc="Validation"):
+    model.eval()
+    running_loss, correct, total = 0.0, 0, 0
+
+    for mels, labels in tqdm(loader, desc=desc, leave=False):
+        mels, labels = mels.to(DEVICE), labels.to(DEVICE)
+        outputs = model(mels)
+        loss = criterion(outputs, labels)
+
+        running_loss += loss.item() * mels.size(0)
+        preds = outputs.argmax(1)
+        correct += (preds == labels).sum().item()
+        total += labels.size(0)
+
+    return running_loss / total, correct / total
+
+
+# ==============================
+#              Main
+# ==============================
+
+def main():
+    print(f"Using device: {DEVICE}")
+
+    # ===== 载入数据 =====
+    metadata_path = os.path.join(PROJECT_ROOT, "data", "metadata1.csv")
+    dataset = HeartSoundDataset(metadata_path)
+
+    N = len(dataset)
+    train_len = int(0.7 * N)
+    val_len = int(0.15 * N)
+    test_len = N - train_len - val_len
+
+    train_ds, val_ds, test_ds = torch.utils.data.random_split(
+        dataset, [train_len, val_len, test_len]
+    )
+
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
+    test_loader = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False)
+
+    print(f"\nDataset split:")
+    print(f"  Train: {train_len}")
+    print(f"  Val:   {val_len}")
+    print(f"  Test:  {test_len}\n")
+
+    # ===== 模型（Transformer）=====
+    model = AudioTransformer(num_classes=5).to(DEVICE)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+
+    best_val_acc = 0.0
+
+    # ===== 训练循环 =====
+    for epoch in range(1, EPOCHS + 1):
+        print(f"\nEpoch [{epoch}/{EPOCHS}]")
+
+        train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer)
+        val_loss, val_acc = evaluate(model, val_loader, criterion, desc="Validation")
+
+        print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}")
+        print(f"Val   Loss: {val_loss:.4f} | Val   Acc: {val_acc:.4f}")
+
+        # 保存最优模型
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            torch.save(model.state_dict(), MODEL_PATH)
+            print(f"🔥 New best Transformer model saved! Acc={val_acc:.4f}")
+
+    # ====== 在 Test 集上做最终评估 ======
+    print("\nEvaluating on Test Set...")
+    best_model = AudioTransformer(num_classes=5).to(DEVICE)
+    best_model.load_state_dict(torch.load(MODEL_PATH))
+
+    test_loss, test_acc = evaluate(best_model, test_loader, criterion, desc="Test")
+
+    print(f"\n===============================")
+    print(f"  Final Test Loss: {test_loss:.4f}")
+    print(f"  Final Test Acc : {test_acc:.4f}")
+    print(f"===============================")
+    print(f"Best Transformer saved at: {MODEL_PATH}")
+
+
+if __name__ == "__main__":
+    main()

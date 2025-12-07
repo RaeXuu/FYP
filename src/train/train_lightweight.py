@@ -1,9 +1,16 @@
 import os
 import sys
+
+# === 添加项目根目录到路径 ===
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
 
 # === 保证路径正确 ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -11,6 +18,11 @@ PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, "../../"))
 SRC_DIR = os.path.join(PROJECT_ROOT, "src")
 if SRC_DIR not in sys.path:
     sys.path.append(SRC_DIR)
+
+# === 再导入模块 ===
+from src.train.dataset import HeartSoundDataset
+from src.model.lightweight_cnn import LightweightCNN
+
 
 # === 导入模块 ===
 from src.train.dataset import HeartSoundDataset
