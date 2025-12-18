@@ -69,3 +69,30 @@ def plot_mel(mel, sr=4000, title="Mel Spectrogram"):
     plt.show()
 
 
+# =========================
+# NEW: Bicoherence / Bispectrum
+# =========================
+def plot_bicoherence(
+    bic,
+    title="2D Bicoherence",
+    cmap="jet",
+):
+    """
+    绘制 2D bicoherence / bispectrum 图
+
+    bic: np.ndarray, shape (H, W)
+         一般是 64x64 或 128x128
+    """
+    plt.figure(figsize=(5, 4))
+    plt.imshow(
+        bic,
+        origin="lower",
+        aspect="auto",
+        cmap=cmap
+    )
+    plt.colorbar(label="Bicoherence")
+    plt.title(title)
+    plt.xlabel("f2 index")
+    plt.ylabel("f1 index")
+    plt.tight_layout()
+    plt.show()
