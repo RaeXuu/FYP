@@ -10,7 +10,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from src.train.dataset import HeartSoundDataset
+from src.train.dataset_mel import HeartSoundDataset
+# from src.train.dataset_bicoherence import HeartSoundBicoherenceDataset
 from src.model.lightweight_cnn import LightweightCNN
 
 
@@ -76,6 +77,7 @@ def main():
     # ===== 载入数据 =====
     metadata_path = os.path.join(PROJECT_ROOT, "data", "metadata1.csv")
     dataset = HeartSoundDataset(metadata_path)
+    # dataset = HeartSoundBicoherenceDataset(metadata_path)
 
     N = len(dataset)
     train_len = int(0.7 * N)

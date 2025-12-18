@@ -20,12 +20,8 @@ if SRC_DIR not in sys.path:
     sys.path.append(SRC_DIR)
 
 # === 再导入模块 ===
-from src.train.dataset import HeartSoundDataset
-from src.model.lightweight_cnn import LightweightCNN
-
-
-# === 导入模块 ===
-from src.train.dataset import HeartSoundDataset
+# from src.train.dataset_mel import HeartSoundDataset
+from src.train.dataset_bicoherence import HeartSoundBicoherenceDataset
 from src.model.lightweight_cnn import LightweightCNN
 
 
@@ -81,7 +77,8 @@ def main():
 
     # === 加载数据集 ===
     metadata_path = os.path.join(PROJECT_ROOT, "data", "metadata1.csv")
-    dataset = HeartSoundDataset(metadata_path)
+    # dataset = HeartSoundDataset(metadata_path)
+    dataset = HeartSoundBicoherenceDataset(metadata_path)
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
     train_ds, val_ds = torch.utils.data.random_split(dataset, [train_size, val_size])

@@ -51,10 +51,10 @@ class DepthwiseSeparableConv(nn.Module):
 class LightweightCNN(nn.Module):
     """
     轻量 CNN 模型：
-    输入: (B, 1, 64, 64) 的 Log-Mel
+    输入: 
     输出: (B, num_classes) 的 logits
     """
-    def __init__(self, num_classes=4, in_channels=1):
+    def __init__(self, num_classes=5, in_channels=1):
         super().__init__()
 
         # 第一层普通卷积（提取低级特征）
@@ -62,7 +62,8 @@ class LightweightCNN(nn.Module):
             nn.Conv2d(in_channels, 16, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(16),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2)   # 64x64 -> 32x32
+            # 对 bicoherence：第一层不做池化，保留低频耦合结构
+            # nn.MaxPool2d(kernel_size=2, stride=2)   # 64x64 -> 32x32
         )
 
         # 后面几层用轻量 depthwise separable conv
