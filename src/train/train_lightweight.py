@@ -14,7 +14,7 @@ from tqdm import tqdm
 # =========================
 # Experiment setting
 # =========================
-FEATURE_TYPE = "wavelet"
+FEATURE_TYPE = "mel"
 # options: "mel", "wavelet", "bicoherence"
 
 
@@ -93,7 +93,7 @@ def main():
 
     train_dataset = Dataset(
         metadata_path=metadata_path,
-        augment=True,
+        augment=False,
     )
     val_dataset = Dataset(
         metadata_path=metadata_path,
