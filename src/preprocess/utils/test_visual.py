@@ -16,7 +16,14 @@ from src.bispectrum.bicoherence_2d import bicoherence_2d
 from src.preprocess.utils.visualize import *
 
 df = pd.read_csv("/mnt/d/FypProj/data/metadata1.csv")
-path = df.iloc[97]["filepath"]
+path = df.iloc[68]["filepath"]
+# fill in need to substract 2 in advance
+# 2-41 artifact
+# 42-60 extrahls
+# 61-94 murmur
+# 95-125 normal
+
+
 
 # Step1 load
 y, sr = load_wav(path)
@@ -38,4 +45,4 @@ plot_waveform(y, sr, "Raw WAV")
 plot_compare_waveforms(y, y_filt, sr)
 plot_segments(segments, sr)
 plot_mel(mel, sr)
-plot_bicoherence(bic, title="Normal Heart Sound - Bicoherence")
+plot_bicoherence(bic, title="Bicoherence")

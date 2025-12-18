@@ -11,6 +11,12 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+# =========================
+# Experiment setting
+# =========================
+FEATURE_TYPE = "wavelet"
+# options: "mel", "wavelet", "bicoherence"
+
 
 # === 保证路径正确 ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,8 +26,14 @@ if SRC_DIR not in sys.path:
     sys.path.append(SRC_DIR)
 
 # === 再导入模块 ===
-# from src.train.dataset_mel import HeartSoundDataset
-from src.train.dataset_bicoherence import HeartSoundBicoherenceDataset
+if FEATURE_TYPE == "mel":
+    from src.train.dataset.dataset_mel import HeartSoundMelDataset as Dataset
+elif FEATURE_TYPE == "wavelet":
+    from src.train.dataset.dataset_wavelet import HeartSoundWaveletDataset as Dataset
+elif FEATURE_TYPE == "bicoherence":
+    from src.train.dataset.dataset_bicoherence import HeartSoundBicoherenceDataset as Dataset
+else:
+    raise ValueError(f"Unknown FEATURE_TYPE: {FEATURE_TYPE}")
 from src.model.lightweight_cnn import LightweightCNN
 
 
@@ -30,7 +42,8 @@ BATCH_SIZE = 16
 EPOCHS = 25
 LEARNING_RATE = 1e-3
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "best_model.pth")
+MODEL_PATH = os.path.join(PROJECT_ROOT, "checkpoints", "best_model.pth")
+
 
 
 def train_one_epoch(model, dataloader, criterion, optimizer):
@@ -77,11 +90,21 @@ def main():
 
     # === 加载数据集 ===
     metadata_path = os.path.join(PROJECT_ROOT, "data", "metadata1.csv")
-    # dataset = HeartSoundDataset(metadata_path)
-    dataset = HeartSoundBicoherenceDataset(metadata_path)
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_ds, val_ds = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+    train_dataset = Dataset(
+        metadata_path=metadata_path,
+        augment=True,
+    )
+    val_dataset = Dataset(
+        metadata_path=metadata_path,
+        augment=False,
+    )
+
+    train_size = int(0.8 * len(train_dataset))
+    val_size = len(train_dataset) - train_size
+
+    train_ds, _ = torch.utils.data.random_split(train_dataset, [train_size, val_size])
+    _, val_ds = torch.utils.data.random_split(val_dataset, [train_size, val_size])
 
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)

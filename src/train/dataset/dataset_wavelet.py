@@ -1,6 +1,6 @@
 import os, sys
 
-# === 项目根路径注入（保持与你原 dataset 一致）===
+# === 项目根路径注入（与你原 dataset 完全一致）===
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
@@ -13,14 +13,14 @@ import pandas as pd
 from src.preprocess.load_wav import load_wav
 from src.preprocess.filters import apply_bandpass
 from src.preprocess.segment import segment_audio
-from src.preprocess.bicoherence_2d import bicoherence_2d
+from src.preprocess.wavelet import cwt_fixed_size
 from src.augment.wav_augment import waveform_augment
 
-class HeartSoundBicoherenceDataset(Dataset):
+class HeartSoundWaveletDataset(Dataset):
     """
-    心音数据集（Bispectrum / Bicoherence 版本）
+    心音数据集（Wavelet / CWT 版本）
 
-    WAV → 滤波 → 切片 → 2D Bicoherence → Tensor
+    WAV → 滤波 → 切片 → Wavelet Scalogram → Tensor
 
     保留 5 类：
         artifact, extrahls, extrastole, murmur, normal
@@ -31,7 +31,7 @@ class HeartSoundBicoherenceDataset(Dataset):
         metadata_path,
         sr=4000,
         segment_sec=2.0,
-        out_size=64,          # 64 或 128
+        out_size=64,          # 与 mel / bicoherence 对齐
         transform=None,
         augment=False,
     ):
@@ -42,13 +42,13 @@ class HeartSoundBicoherenceDataset(Dataset):
         self.transform = transform
         self.augment = augment
 
-        # === 显式保留 5 类 ===
+        # === 显式保留 5 类（与 mel / bicoherence 完全一致）===
         self.valid_labels = ["artifact", "extrahls", "extrastole", "murmur", "normal"]
         self.df = self.df[self.df["label"].isin(self.valid_labels)].reset_index(drop=True)
 
         self.label_to_idx = {label: i for i, label in enumerate(self.valid_labels)}
 
-        self.samples = []  # [(segment, label_str), ...]
+        self.samples = []   # [(segment, label_str), ...]
 
         for _, row in self.df.iterrows():
             filepath = row["filepath"]
@@ -66,10 +66,10 @@ class HeartSoundBicoherenceDataset(Dataset):
             for seg in segments:
                 self.samples.append((seg, label))
 
-        print("[BicoherenceDataset] 使用特征: 2D bicoherence")
-        print("[BicoherenceDataset] 输出尺寸:", out_size, "x", out_size)
-        print("[BicoherenceDataset] 保留标签:", self.valid_labels)
-        print("[BicoherenceDataset] 总切片数:", len(self.samples))
+        print("[WaveletDataset] 使用特征: CWT scalogram")
+        print("[WaveletDataset] 输出尺寸:", out_size, "x", out_size)
+        print("[WaveletDataset] 保留标签:", self.valid_labels)
+        print("[WaveletDataset] 总切片数:", len(self.samples))
 
     def __len__(self):
         return len(self.samples)
@@ -80,28 +80,28 @@ class HeartSoundBicoherenceDataset(Dataset):
         if self.augment:
             seg = waveform_augment(seg)
 
-        # === 核心区别：bicoherence 特征 ===
-        bic = bicoherence_2d(
+        # === 核心区别：Wavelet 特征 ===
+        wav_feat = cwt_fixed_size(
             seg,
-            fs=self.sr,
+            sr=self.sr,
             out_size=self.out_size,
         )
 
-        bic = torch.tensor(bic, dtype=torch.float32).unsqueeze(0)  # (1, H, W)
+        wav_feat = torch.tensor(wav_feat, dtype=torch.float32).unsqueeze(0)  # (1, H, W)
 
         if self.transform:
-            bic = self.transform(bic)
+            wav_feat = self.transform(wav_feat)
 
         label_idx = self.label_to_idx[label_str]
 
-        return bic, label_idx
+        return wav_feat, label_idx
 
 
 # ==========================
-# 自测
+# 自测（和你另外两个 dataset 风格完全一致）
 # ==========================
 if __name__ == "__main__":
-    ds = HeartSoundBicoherenceDataset(
+    ds = HeartSoundWaveletDataset(
         "/mnt/d/FypProj/data/metadata1.csv",
         out_size=64,
     )

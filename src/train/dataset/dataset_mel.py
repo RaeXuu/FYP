@@ -14,9 +14,10 @@ from src.preprocess.load_wav import load_wav
 from src.preprocess.filters import apply_bandpass
 from src.preprocess.segment import segment_audio
 from src.preprocess.mel import logmel_fixed_size
+from src.augment.wav_augment import waveform_augment
 
 
-class HeartSoundDataset(Dataset):
+class HeartSoundMelDataset(Dataset):
     """
     心音数据集（训练用）
     WAV → 滤波 → 切片 → Log-Mel(64×64) → Tensor
@@ -24,12 +25,13 @@ class HeartSoundDataset(Dataset):
         artifact, extrahls, extrastole, murmur, normal
     """
 
-    def __init__(self, metadata_path, sr=4000, segment_sec=2.0, n_mels=64, transform=None):
+    def __init__(self, metadata_path, sr=4000, segment_sec=2.0, n_mels=64, transform=None, augment=False,):
         self.df = pd.read_csv(metadata_path)
         self.sr = sr
         self.segment_sec = segment_sec
         self.n_mels = n_mels
         self.transform = transform
+        self.augment = augment
 
         # === 显式保留 5 个有标签的类别 ===
         self.valid_labels = ["artifact", "extrahls", "extrastole", "murmur", "normal"]
@@ -60,6 +62,9 @@ class HeartSoundDataset(Dataset):
 
     def __getitem__(self, idx):
         seg, label_str = self.samples[idx]
+        
+        if self.augment:
+            seg = waveform_augment(seg)
 
         mel = logmel_fixed_size(seg, sr=self.sr, target_shape=(64, 64))
         mel = torch.tensor(mel, dtype=torch.float32).unsqueeze(0)  # (1, 64, 64)
@@ -70,7 +75,7 @@ class HeartSoundDataset(Dataset):
 
 
 if __name__ == "__main__":
-    ds = HeartSoundDataset("/mnt/d/FypProj/data/metadata1.csv")
+    ds = HeartSoundMelDataset("/mnt/d/FypProj/data/metadata1.csv")
     print("Dataset 总长度（切片数）:", len(ds))
     mel, label = ds[0]
     print("单个 Mel shape:", mel.shape)
