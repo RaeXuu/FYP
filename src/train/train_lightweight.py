@@ -6,10 +6,18 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
+import numpy as np
+from sklearn.metrics import confusion_matrix, classification_report
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
+import yaml
+from pathlib import Path
+from pprint import pprint
+
+
 
 # =========================
 # Experiment setting
@@ -72,6 +80,9 @@ def evaluate(model, dataloader, criterion):
     model.eval()
     running_loss, correct, total = 0.0, 0, 0
 
+    all_preds = []
+    all_labels = []
+
     for mels, labels in tqdm(dataloader, desc="Validation", leave=False):
         mels, labels = mels.to(DEVICE), labels.to(DEVICE)
         outputs = model(mels)
@@ -79,26 +90,68 @@ def evaluate(model, dataloader, criterion):
 
         running_loss += loss.item() * mels.size(0)
         preds = outputs.argmax(1)
+
         correct += (preds == labels).sum().item()
         total += labels.size(0)
 
-    return running_loss / total, correct / total
+        all_preds.extend(preds.cpu().numpy())
+        all_labels.extend(labels.cpu().numpy())
+
+    val_loss = running_loss / total
+    val_acc = correct / total
+
+    return val_loss, val_acc, np.array(all_labels), np.array(all_preds)
+
 
 
 def main():
     print(f"Using device: {DEVICE}")
 
-    # === 加载数据集 ===
+    # =========================
+    # Load config
+    # =========================
+    CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.yaml"
+    with open(CONFIG_PATH, "r") as f:
+        cfg = yaml.safe_load(f)
+
+    print("\n" + "=" * 60)
+    print(f"[CONFIG] Using config.yaml at:\n{CONFIG_PATH}")
+    pprint(cfg)
+    print("=" * 60 + "\n")
+
+    # =========================
+    # Paths
+    # =========================
     metadata_path = os.path.join(PROJECT_ROOT, "data", "metadata1.csv")
 
+    # =========================
+    # Dataset config (fail-fast)
+    # =========================
+    data_cfg = cfg["data"]
+    mel_cfg = cfg["mel"]
+
+    sr = data_cfg["sample_rate"]
+    segment_sec = data_cfg["segment_length"]
+
+    # =========================
+    # Datasets
+    # =========================
     train_dataset = Dataset(
         metadata_path=metadata_path,
+        sr=sr,
+        segment_sec=segment_sec,
+        mel_cfg=mel_cfg,
         augment=False,
     )
+
     val_dataset = Dataset(
         metadata_path=metadata_path,
+        sr=sr,
+        segment_sec=segment_sec,
+        mel_cfg=mel_cfg,
         augment=False,
     )
+
 
     train_size = int(0.8 * len(train_dataset))
     val_size = len(train_dataset) - train_size
@@ -119,10 +172,25 @@ def main():
         print(f"\nEpoch [{epoch}/{EPOCHS}]")
 
         train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer)
-        val_loss, val_acc = evaluate(model, val_loader, criterion)
+        val_loss, val_acc, y_true, y_pred = evaluate(model, val_loader, criterion)
+
 
         print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}")
         print(f"Val   Loss: {val_loss:.4f} | Val   Acc: {val_acc:.4f}")
+        # === Validation metrics (Confusion Matrix & Recall) ===
+        class_names = ['artifact', 'extrahls', 'extrastole', 'murmur', 'normal']
+
+        cm = confusion_matrix(y_true, y_pred)
+        print("\n[Validation] Confusion Matrix:")
+        print(cm)
+
+        print("\n[Validation] Classification Report:")
+        print(classification_report(
+            y_true,
+            y_pred,
+            target_names=class_names,
+            digits=4
+        ))
 
         # === 保存最优模型 ===
         if val_acc > best_acc:

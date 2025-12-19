@@ -4,10 +4,8 @@ import librosa
 
 def wav_to_logmel(
     y,
-    sr=4000,
-    n_mels=64,
-    n_fft=512,
-    hop_length=256,
+    sr,
+    mel_cfg,
     eps=1e-6
 ):
     """
@@ -20,12 +18,14 @@ def wav_to_logmel(
     mel = librosa.feature.melspectrogram(
         y=y,
         sr=sr,
-        n_fft=n_fft,
-        hop_length=hop_length,
-        n_mels=n_mels,
-        power=2.0
+        n_fft=mel_cfg["n_fft"],
+        hop_length=mel_cfg["hop_length"],
+        win_length=mel_cfg.get("win_length", mel_cfg["n_fft"]),
+        n_mels=mel_cfg["n_mels"],
+        fmin=mel_cfg.get("fmin", 0),
+        fmax=mel_cfg.get("fmax", None),
+        power=mel_cfg.get("power", 2.0),
     )
-
     # 2. 转 Log-Mel
     logmel = librosa.power_to_db(mel + eps)
 
@@ -34,34 +34,24 @@ def wav_to_logmel(
 
 def logmel_fixed_size(
     y,
-    sr=4000,
-    n_mels=64,
-    n_fft=512,
-    hop_length=256,
-    target_shape=(64, 64)
+    sr,
+    mel_cfg,
+    target_shape
 ):
-    """
-    生成固定大小的 Log-Mel 图 (用于 CNN 输入)
-    """
-
     mel = wav_to_logmel(
-        y,
+        y=y,
         sr=sr,
-        n_mels=n_mels,
-        n_fft=n_fft,
-        hop_length=hop_length
+        mel_cfg=mel_cfg
     )
-
-    # mel shape = (n_mels, time_frames)
-    # 需要 resize 到固定 shape，例如 (64, 64)
 
     mel_resized = librosa.util.fix_length(
         mel,
-        size=target_shape[1],  # 固定 time 维度为 64
+        size=target_shape[1],
         axis=1
     )
 
     return mel_resized
+
 
 
 if __name__ == "__main__":

@@ -64,7 +64,6 @@ def cwt_fixed_size(
         align_corners=False,
     ).squeeze().numpy()
 
-
     # 6️⃣ 归一化到 [0, 1]
     min_val = scalogram_resized.min()
     max_val = scalogram_resized.max()

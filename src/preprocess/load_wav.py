@@ -2,18 +2,29 @@
 # 🎚 重采样到统一采样率（默认 4000 Hz）
 # 🔄 幅度归一化（[-1, 1]）
 # 📦 批量根据 metadata 读取所有音频
+import yaml
+from pathlib import Path
+
+CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.yaml"
+with open(CONFIG_PATH, "r") as f:
+    cfg = yaml.safe_load(f)
+
+data_cfg = cfg["data"]
 
 import librosa
 import numpy as np
 import pandas as pd
 
-def load_wav(filepath, target_sr=4000):
+def load_wav(filepath, target_sr=None):
     """
     加载 WAV 文件并做基础预处理：
     1. 读取音频
     2. 重采样到 target_sr
     3. 幅度归一化到 [-1, 1]
     """
+    if target_sr is None:
+        target_sr = data_cfg["sample_rate"]
+
     # 读取原始音频
     y, sr = librosa.load(filepath, sr=None)
 

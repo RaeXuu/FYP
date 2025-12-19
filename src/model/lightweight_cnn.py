@@ -106,7 +106,7 @@ class LightweightCNN(nn.Module):
 
 if __name__ == "__main__":
     # 简单自测
-    model = LightweightCNN(num_classes=4, in_channels=1)
+    model = LightweightCNN(num_classes=5, in_channels=1)
     x = torch.randn(2, 1, 64, 64)  # batch_size=2
     out = model(x)
 

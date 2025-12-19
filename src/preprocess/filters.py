@@ -1,6 +1,16 @@
 # 做一个 Butterworth 带通滤波器
 # 典型心音频段：20–400 Hz（参数可以改）
 
+import yaml
+from pathlib import Path
+
+CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.yaml"
+with open(CONFIG_PATH, "r") as f:
+    cfg = yaml.safe_load(f)
+
+data_cfg = cfg["data"]
+
+
 import numpy as np
 from scipy.signal import butter, filtfilt
 
@@ -19,7 +29,7 @@ def design_bandpass(lowcut, highcut, fs, order=4):
     return b, a
 
 
-def apply_bandpass(y, fs=4000, lowcut=20, highcut=400, order=4):
+def apply_bandpass(y, fs, lowcut=None, highcut=None, order=4):
     """
     对一条音频信号做带通滤波。
 
@@ -35,6 +45,11 @@ def apply_bandpass(y, fs=4000, lowcut=20, highcut=400, order=4):
     """
     if y is None or len(y) == 0:
         return y
+    
+    if lowcut is None:
+        lowcut = data_cfg["bandpass"]["low"]
+    if highcut is None:
+        highcut = data_cfg["bandpass"]["high"]
 
     b, a = design_bandpass(lowcut, highcut, fs, order=order)
     # filtfilt 双向滤波，零相位失真

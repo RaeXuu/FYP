@@ -12,7 +12,7 @@ from src.preprocess.load_wav import load_wav
 from src.preprocess.filters import apply_bandpass
 from src.preprocess.segment import segment_audio
 from src.preprocess.mel import logmel_fixed_size
-from src.bispectrum.bicoherence_2d import bicoherence_2d
+from preprocess.bicoherence_2d import bicoherence_2d
 from src.preprocess.utils.visualize import *
 
 df = pd.read_csv("/mnt/d/FypProj/data/metadata1.csv")
