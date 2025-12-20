@@ -153,11 +153,45 @@ def main():
     )
 
 
-    train_size = int(0.8 * len(train_dataset))
-    val_size = len(train_dataset) - train_size
+    # =========================
+    # Group split by fname（关键修改）
+    # =========================
+    SPLIT_SEED = 42
+    TRAIN_RATIO = 0.8
+    VAL_RATIO = 0.2
 
-    train_ds, _ = torch.utils.data.random_split(train_dataset, [train_size, val_size])
-    _, val_ds = torch.utils.data.random_split(val_dataset, [train_size, val_size])
+    rng = np.random.RandomState(SPLIT_SEED)
+
+    # 1️⃣ 从 dataset 拿到每个切片对应的 fname
+    all_fnames = [train_dataset.get_fname(i) for i in range(len(train_dataset))]
+    unique_fnames = np.unique(all_fnames)
+    rng.shuffle(unique_fnames)
+
+    n_rec = len(unique_fnames)
+    n_train_rec = int(TRAIN_RATIO * n_rec)
+
+    train_rec_ids = set(unique_fnames[:n_train_rec])
+    val_rec_ids   = set(unique_fnames[n_train_rec:])
+
+    train_indices = []
+    val_indices   = []
+
+    # 2️⃣ 按 fname 分配每一个切片
+    for idx, fname in enumerate(all_fnames):
+        if fname in train_rec_ids:
+            train_indices.append(idx)
+        else:
+            val_indices.append(idx)
+
+    train_ds = torch.utils.data.Subset(train_dataset, train_indices)
+    val_ds   = torch.utils.data.Subset(train_dataset, val_indices)
+
+    print("[Group Split by fname]")
+    print(f"  train samples = {len(train_ds)}")
+    print(f"  val   samples = {len(val_ds)}")
+    print(f"  unique train recordings = {len(train_rec_ids)}")
+    print(f"  unique val   recordings = {len(val_rec_ids)}")
+
 
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
