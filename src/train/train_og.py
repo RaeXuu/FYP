@@ -7,7 +7,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
 import numpy as np
-from sklearn.metrics import confusion_matrix, classification_report, recall_score
+from sklearn.metrics import confusion_matrix, classification_report
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -17,10 +17,14 @@ import yaml
 from pathlib import Path
 from pprint import pprint
 
+
+
 # =========================
 # Experiment setting
 # =========================
 FEATURE_TYPE = "mel"
+# options: "mel", "wavelet", "bicoherence"
+
 
 # === 保证路径正确 ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -32,10 +36,14 @@ if SRC_DIR not in sys.path:
 # === 再导入模块 ===
 if FEATURE_TYPE == "mel":
     from src.train.dataset.dataset_mel import HeartSoundMelDataset as Dataset
+elif FEATURE_TYPE == "wavelet":
+    from src.train.dataset.dataset_wavelet import HeartSoundWaveletDataset as Dataset
+elif FEATURE_TYPE == "bicoherence":
+    from src.train.dataset.dataset_bicoherence import HeartSoundBicoherenceDataset as Dataset
 else:
     raise ValueError(f"Unknown FEATURE_TYPE: {FEATURE_TYPE}")
-
 from src.model.lightweight_cnn import LightweightCNN
+
 
 # === 训练参数 ===
 BATCH_SIZE = 16
@@ -43,6 +51,7 @@ EPOCHS = 25
 LEARNING_RATE = 1e-3
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_PATH = os.path.join(PROJECT_ROOT, "checkpoints", "best_model.pth")
+
 
 
 def train_one_epoch(model, dataloader, criterion, optimizer):
@@ -94,6 +103,7 @@ def evaluate(model, dataloader, criterion):
     return val_loss, val_acc, np.array(all_labels), np.array(all_preds)
 
 
+
 def main():
     print(f"Using device: {DEVICE}")
 
@@ -109,108 +119,124 @@ def main():
     pprint(cfg)
     print("=" * 60 + "\n")
 
+    # =========================
+    # Paths
+    # =========================
+    # metadata_path = os.path.join(PROJECT_ROOT, "data", "metadata1.csv")
     metadata_path = os.path.join(PROJECT_ROOT, "data", "metadata_physionet.csv")
 
+    # =========================
+    # Dataset config (fail-fast)
+    # =========================
     data_cfg = cfg["data"]
     mel_cfg = cfg["mel"]
+
     sr = data_cfg["sample_rate"]
     segment_sec = data_cfg["segment_length"]
 
-    # ==========================================================================
-    # 【新增改动点 1】：初始化两个模板，确保验证集和测试集没有数据增强干扰
-    # ==========================================================================
-    train_dataset = Dataset(metadata_path=metadata_path, sr=sr, segment_sec=segment_sec, mel_cfg=mel_cfg, augment=True)
-    val_dataset   = Dataset(metadata_path=metadata_path, sr=sr, segment_sec=segment_sec, mel_cfg=mel_cfg, augment=False)
+    # =========================
+    # Datasets
+    # =========================
+    train_dataset = Dataset(
+        metadata_path=metadata_path,
+        sr=sr,
+        segment_sec=segment_sec,
+        mel_cfg=mel_cfg,
+        augment=False,
+    )
 
-    # ==========================================================================
-    # 【新增改动点 2】：将 80/20 划分修改为 80/10/10 三路划分
-    # ==========================================================================
+    val_dataset = Dataset(
+        metadata_path=metadata_path,
+        sr=sr,
+        segment_sec=segment_sec,
+        mel_cfg=mel_cfg,
+        augment=False,
+    )
+
+
+    # =========================
+    # Group split by fname（关键修改）
+    # =========================
     SPLIT_SEED = 42
-    TRAIN_RATIO, VAL_RATIO = 0.8, 0.1  # 剩余 0.1 自动分配给 Test
+    TRAIN_RATIO = 0.8
+    VAL_RATIO = 0.2
 
     rng = np.random.RandomState(SPLIT_SEED)
+
+    # 1️⃣ 从 dataset 拿到每个切片对应的 fname
     all_fnames = [train_dataset.get_fname(i) for i in range(len(train_dataset))]
     unique_fnames = np.unique(all_fnames)
     rng.shuffle(unique_fnames)
 
     n_rec = len(unique_fnames)
-    idx_train = int(n_rec * TRAIN_RATIO)
-    idx_val   = int(n_rec * (TRAIN_RATIO + VAL_RATIO))
+    n_train_rec = int(TRAIN_RATIO * n_rec)
 
-    train_rec_ids = set(unique_fnames[:idx_train])
-    val_rec_ids   = set(unique_fnames[idx_train:idx_val])
-    test_rec_ids  = set(unique_fnames[idx_val:])
+    train_rec_ids = set(unique_fnames[:n_train_rec])
+    val_rec_ids   = set(unique_fnames[n_train_rec:])
 
-    train_indices, val_indices, test_indices = [], [], []
+    train_indices = []
+    val_indices   = []
+
+    # 2️⃣ 按 fname 分配每一个切片
     for idx, fname in enumerate(all_fnames):
         if fname in train_rec_ids:
             train_indices.append(idx)
-        elif fname in val_rec_ids:
-            val_indices.append(idx)
         else:
-            test_indices.append(idx)
+            val_indices.append(idx)
 
-    # 关键：验证集和测试集绑定到 augment=False 的模板上
     train_ds = torch.utils.data.Subset(train_dataset, train_indices)
-    val_ds   = torch.utils.data.Subset(val_dataset, val_indices)
-    test_ds  = torch.utils.data.Subset(val_dataset, test_indices)
+    val_ds   = torch.utils.data.Subset(train_dataset, val_indices)
 
-    print("[Group Split by fname (80/10/10)]")
-    print(f"  train samples = {len(train_ds)} | val samples = {len(val_ds)} | test samples = {len(test_ds)}")
-    # ==========================================================================
+    print("[Group Split by fname]")
+    print(f"  train samples = {len(train_ds)}")
+    print(f"  val   samples = {len(val_ds)}")
+    print(f"  unique train recordings = {len(train_rec_ids)}")
+    print(f"  unique val   recordings = {len(val_rec_ids)}")
+
 
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader   = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
-    test_loader  = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False)
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
 
+    # === 模型、loss、优化器 ===
+    # model = LightweightCNN(num_classes=5).to(DEVICE)
     model = LightweightCNN(num_classes=2).to(DEVICE)
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     best_acc = 0.0
-
     for epoch in range(1, EPOCHS + 1):
         print(f"\nEpoch [{epoch}/{EPOCHS}]")
 
         train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer)
         val_loss, val_acc, y_true, y_pred = evaluate(model, val_loader, criterion)
 
-        scheduler.step(val_acc)
 
-        # 这里完全保留了你原本 train_lightweight.py 的打印风格
         print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}")
         print(f"Val   Loss: {val_loss:.4f} | Val   Acc: {val_acc:.4f}")
-        
+        # === Validation metrics (Confusion Matrix & Recall) ===
+        # class_names = ['artifact', 'extrahls', 'extrastole', 'murmur', 'normal']
         class_names = ['Normal', 'Abnormal']
+
         cm = confusion_matrix(y_true, y_pred)
         print("\n[Validation] Confusion Matrix:")
         print(cm)
 
         print("\n[Validation] Classification Report:")
-        print(classification_report(y_true, y_pred, target_names=class_names, digits=4))
+        print(classification_report(
+            y_true,
+            y_pred,
+            target_names=class_names,
+            digits=4
+        ))
 
+        # === 保存最优模型 ===
         if val_acc > best_acc:
             best_acc = val_acc
             torch.save(model.state_dict(), MODEL_PATH)
             print(f"✅ New best model saved! Acc={best_acc:.4f}")
 
-    # ==========================================================================
-    # 【新增改动点 3】：训练结束后，在完全未见的测试集上进行最终评估 (高考)
-    # ==========================================================================
-    print("\n" + "!"*20 + " FINAL TEST ON TEST SET " + "!"*20)
-    model.load_state_dict(torch.load(MODEL_PATH))
-    
-    test_loss, test_acc, y_true_test, y_pred_test = evaluate(model, test_loader, criterion)
-    
-    # 计算 PhysioNet 官方 M-score
-    se = recall_score(y_true_test, y_pred_test, pos_label=1)
-    sp = recall_score(y_true_test, y_pred_test, pos_label=0)
-    m_score = (se + sp) / 2
-    
-    print(f"Test Loss: {test_loss:.4f} | Test Acc: {test_acc:.4f} | M-Score: {m_score:.4f}")
-    print("\n[Test Set] Classification Report:")
-    print(classification_report(y_true_test, y_pred_test, target_names=['Normal', 'Abnormal'], digits=4))
+    print(f"\nTraining finished. Best Val Acc={best_acc:.4f}")
+    print(f"Model saved to: {MODEL_PATH}")
 
 
 if __name__ == "__main__":

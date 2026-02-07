@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import librosa.display
 import numpy as np
 
-def plot_waveform(y, sr=4000, title="Waveform"):
+def plot_waveform(y, sr=2000, title="Waveform"):
     """
     绘制音频波形
     """
@@ -15,7 +15,7 @@ def plot_waveform(y, sr=4000, title="Waveform"):
     plt.show()
 
 
-def plot_compare_waveforms(y1, y2, sr=4000, labels=("Before", "After")):
+def plot_compare_waveforms(y1, y2, sr=2000, labels=("Before", "After")):
     """
     对比：滤波前 vs 滤波后
     """
@@ -33,7 +33,7 @@ def plot_compare_waveforms(y1, y2, sr=4000, labels=("Before", "After")):
     plt.show()
 
 
-def plot_segments(segments, sr=4000):
+def plot_segments(segments, sr=2000):
     """
     展示切片后的多段波形
     """
@@ -49,7 +49,7 @@ def plot_segments(segments, sr=4000):
     plt.show()
 
 
-def plot_mel(mel, sr=4000, title="Mel Spectrogram"):
+def plot_mel(mel, sr=2000, title="Mel Spectrogram"):
     """
     绘制 Mel 频谱（2D CNN 输入）
     mel shape: (n_mels, time_frames)
@@ -58,7 +58,7 @@ def plot_mel(mel, sr=4000, title="Mel Spectrogram"):
     librosa.display.specshow(
         mel,
         sr=sr,
-        hop_length=256,
+        hop_length=64,
         x_axis='time',
         y_axis='mel',
         cmap='magma'
@@ -81,7 +81,7 @@ def plot_bicoherence(
     绘制 2D bicoherence / bispectrum 图
 
     bic: np.ndarray, shape (H, W)
-         一般是 64x64 或 128x128
+        一般是 64x64 或 128x128
     """
     plt.figure(figsize=(5, 4))
     plt.imshow(

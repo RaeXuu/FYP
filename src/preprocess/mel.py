@@ -68,16 +68,16 @@ if __name__ == "__main__":
     from src.preprocess.filters import apply_bandpass
     from src.preprocess.segment import segment_audio
 
-    df = pd.read_csv("/mnt/d/FypProj/data/metadata1.csv")
+    df = pd.read_csv("/mnt/d/FypProj/data/metadata_physionet.csv")
     path = df.iloc[0]["filepath"]
 
     print("测试样本:", path)
 
     # Step1: load wav
-    y, sr = load_wav(path, target_sr=4000)
+    y, sr = load_wav(path, target_sr=2000)
 
     # Step2: bandpass
-    y = apply_bandpass(y, fs=sr, lowcut=20, highcut=400)
+    y = apply_bandpass(y, fs=sr, lowcut=25, highcut=400)
 
     # Step3: segment
     segments = segment_audio(y, sr=sr, segment_sec=2.0)
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     print("单段长度:", len(seg))
 
     # Step4: log-mel
-    mel = logmel_fixed_size(seg, sr=sr, target_shape=(64, 64))
+    mel = logmel_fixed_size(seg, sr=sr, target_shape=(32, 64))
 
     print("Log-Mel shape:", mel.shape)
     print("Mel 测试完成 ✅")

@@ -14,7 +14,7 @@ data_cfg = cfg["data"]
 import numpy as np
 from scipy.signal import butter, filtfilt
 
-def design_bandpass(lowcut, highcut, fs, order=4):
+def design_bandpass(lowcut, highcut, fs, order=5):
     """
     设计 Butterworth 带通滤波器
     lowcut, highcut: 截止频率（Hz）
@@ -29,7 +29,7 @@ def design_bandpass(lowcut, highcut, fs, order=4):
     return b, a
 
 
-def apply_bandpass(y, fs, lowcut=None, highcut=None, order=4):
+def apply_bandpass(y, fs, lowcut=None, highcut=None, order=5):
     """
     对一条音频信号做带通滤波。
 
@@ -67,16 +67,16 @@ if __name__ == "__main__":
     import pandas as pd
     from src.preprocess.load_wav import load_wav
 
-    meta_path = "/mnt/d/FypProj/data/metadata1.csv"
+    meta_path = "/mnt/d/FypProj/data/metadata_physionet.csv"
     df = pd.read_csv(meta_path)
 
     first_path = df.iloc[0]["filepath"]
     print("测试样本路径:", first_path)
 
-    y, sr = load_wav(first_path, target_sr=4000)
+    y, sr = load_wav(first_path, target_sr=2000)
     print("原始信号长度:", len(y))
 
-    y_filt = apply_bandpass(y, fs=sr, lowcut=20, highcut=400, order=4)
+    y_filt = apply_bandpass(y, fs=sr, lowcut=25, highcut=400, order=5)
     print("滤波后信号长度:", len(y_filt))
 
     # 简单对比能量

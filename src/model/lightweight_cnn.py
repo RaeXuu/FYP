@@ -1,116 +1,127 @@
-
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+class CoordAtt(nn.Module):
+    """
+    Coordinate Attention 模块
+    分别在水平（时间）和垂直（频率）方向进行特征编码，保留精确的位置信息。
+    """
+    def __init__(self, inp, oup, reduction=16):
+        super(CoordAtt, self).__init__()
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+
+        mip = max(8, inp // reduction)
+
+        self.conv1 = nn.Conv2d(inp, mip, kernel_size=1, stride=1, padding=0)
+        self.bn1 = nn.BatchNorm2d(mip)
+        self.act = nn.ReLU(inplace=True)
+        
+        self.conv_h = nn.Conv2d(mip, oup, kernel_size=1, stride=1, padding=0)
+        self.conv_w = nn.Conv2d(mip, oup, kernel_size=1, stride=1, padding=0)
+        
+    def forward(self, x):
+        identity = x
+        n, c, h, w = x.size()
+        
+        # 1. 分别在高度和宽度方向进行池化
+        x_h = self.pool_h(x)
+        x_w = self.pool_w(x).permute(0, 1, 3, 2)
+        
+        # 2. 拼接并进行特征融合
+        y = torch.cat([x_h, x_w], dim=2)
+        y = self.act(self.bn1(self.conv1(y)))
+        
+        # 3. 拆分回两个方向
+        x_h, x_w = torch.split(y, [h, w], dim=2)
+        x_w = x_w.permute(0, 1, 3, 2)
+
+        # 4. 生成注意力权重并应用
+        a_h = torch.sigmoid(self.conv_h(x_h))
+        a_w = torch.sigmoid(self.conv_w(x_w))
+
+        return identity * a_h * a_w
 
 class DepthwiseSeparableConv(nn.Module):
     """
-    深度可分离卷积模块：
-    1) depthwise: 对每个通道单独做卷积
-    2) pointwise: 1x1 卷积做通道混合
+    带 Coordinate Attention 的深度可分离卷积
     """
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
+    def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()
-
-        # depthwise
-        self.depthwise = nn.Conv2d(
-            in_channels,
-            in_channels,
-            kernel_size=kernel_size,
-            stride=stride,
-            padding=padding,
-            groups=in_channels,
-            bias=False
+        self.conv = nn.Sequential(
+            # Depthwise
+            nn.Conv2d(in_channels, in_channels, 3, stride, 1, groups=in_channels, bias=False),
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(inplace=True),
+            # Pointwise
+            nn.Conv2d(in_channels, out_channels, 1, 1, 0, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            # 集成 CoordAtt
+            CoordAtt(out_channels, out_channels)
         )
-        self.bn1 = nn.BatchNorm2d(in_channels)
-
-        # pointwise
-        self.pointwise = nn.Conv2d(
-            in_channels,
-            out_channels,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-            bias=False
-        )
-        self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
-        x = self.depthwise(x)
-        x = self.bn1(x)
-        x = F.relu(x, inplace=True)
-
-        x = self.pointwise(x)
-        x = self.bn2(x)
-        x = F.relu(x, inplace=True)
-        return x
+        return self.conv(x)
 
 
 class LightweightCNN(nn.Module):
     """
-    轻量 CNN 模型：
-    输入: 
-    输出: (B, num_classes) 的 logits
+    升级版轻量级 CNN (PhysioNet 2016 二分类专用)
     """
-    def __init__(self, num_classes=5, in_channels=1):
+    def __init__(self, num_classes=2, in_channels=1):
         super().__init__()
 
-        # 第一层普通卷积（提取低级特征）
+        # 第一层：普通卷积 (16 -> 32)
         self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels, 16, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(16),
+            nn.Conv2d(in_channels, 32, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
-            # 对 bicoherence：第一层不做池化，保留低频耦合结构
-            # nn.MaxPool2d(kernel_size=2, stride=2)   # 64x64 -> 32x32
         )
 
-        # 后面几层用轻量 depthwise separable conv
-        self.dsconv2 = nn.Sequential(
-            DepthwiseSeparableConv(16, 32, kernel_size=3, stride=1, padding=1),
-            nn.MaxPool2d(kernel_size=2, stride=2)   # 32x32 -> 16x16
+        # 后面几层通道数：32 -> 64 -> 128 -> 256
+        self.layer2 = nn.Sequential(
+            DepthwiseSeparableConv(32, 64),
+            nn.MaxPool2d(2)  # 32x64 -> 16x32
         )
 
-        self.dsconv3 = nn.Sequential(
-            DepthwiseSeparableConv(32, 64, kernel_size=3, stride=1, padding=1),
-            nn.MaxPool2d(kernel_size=2, stride=2)   # 16x16 -> 8x8
+        self.layer3 = nn.Sequential(
+            DepthwiseSeparableConv(64, 128),
+            nn.MaxPool2d(2)  # 16x32 -> 8x16
         )
 
-        self.dsconv4 = nn.Sequential(
-            DepthwiseSeparableConv(64, 128, kernel_size=3, stride=1, padding=1),
-            nn.MaxPool2d(kernel_size=2, stride=2)   # 8x8 -> 4x4
+        self.layer4 = nn.Sequential(
+            DepthwiseSeparableConv(128, 256),
+            nn.MaxPool2d(2)  # 8x16 -> 4x8
         )
 
-        # 全局平均池化：4x4 -> 1x1
         self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
 
-        # 分类头
-        self.classifier = nn.Linear(128, num_classes)
+        self.classifier = nn.Sequential(
+            nn.Dropout(0.3), # 增加 Dropout 缓解过拟合
+            nn.Linear(256, num_classes)
+        )
 
     def forward(self, x):
-        """
-        x: (B, 1, 64, 64)
-        """
         x = self.conv1(x)
-        x = self.dsconv2(x)
-        x = self.dsconv3(x)
-        x = self.dsconv4(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
 
-        x = self.global_pool(x)      # (B, 128, 1, 1)
-        x = x.view(x.size(0), -1)    # (B, 128)
-
-        logits = self.classifier(x)  # (B, num_classes)
+        x = self.global_pool(x)
+        x = x.view(x.size(0), -1)
+        logits = self.classifier(x)
         return logits
 
 
 if __name__ == "__main__":
-    # 简单自测
-    model = LightweightCNN(num_classes=5, in_channels=1)
-    x = torch.randn(2, 1, 64, 64)  # batch_size=2
+    # 模拟输入：BatchSize=2, 通道=1, Mel频带=32, 时间帧=64
+    model = LightweightCNN(num_classes=2, in_channels=1)
+    x = torch.randn(2, 1, 32, 64) 
     out = model(x)
 
     print("输入形状:", x.shape)
     print("输出形状:", out.shape)
-    print("参数量:", sum(p.numel() for p in model.parameters()) )
-    print("LightweightCNN 自测完成 ✅")
+    print(f"总参数量: {sum(p.numel() for p in model.parameters()) / 1e3:.2f} k")
+    print("LightweightCNN (CoordAtt版) 自测完成 ✅")

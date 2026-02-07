@@ -2,6 +2,7 @@
 # Waveform-level augmentation for heart sound signals
 
 import numpy as np
+import librosa
 
 
 def random_gain(x, gain_range=(0.8, 1.2)):
@@ -42,12 +43,33 @@ def random_time_shift(x, max_shift_ratio=0.1):
     shift = np.random.randint(-max_shift, max_shift)
     return np.roll(x, shift)
 
+def random_resampling(x, stretch_range=(0.9, 1.1)):
+    """
+    随机重采样：模拟心率（BPM）的变化。
+    这是对抗过拟合最有效的手段之一。
+    """
+    stretch = np.random.uniform(stretch_range[0], stretch_range[1])
+    n_orig = len(x)
+    # 使用线性插值进行简易拉伸，然后恢复到固定长度
+    x_stretched = np.interp(
+        np.linspace(0, n_orig, int(n_orig * stretch)),
+        np.arange(n_orig),
+        x
+    )
+    # 保持长度一致（截断或补零）
+    if len(x_stretched) > n_orig:
+        return x_stretched[:n_orig]
+    else:
+        return np.pad(x_stretched, (0, n_orig - len(x_stretched)), 'constant')
+
 
 def waveform_augment(
     x,
     prob_gain=0.5,
     prob_noise=0.5,
     prob_shift=0.5,
+    prob_resample=0.3, # 新增：模拟心率波动
+    prob_flip=0.5      # 新增：极性反转
 ):
     """
     组合增广（按概率触发）
@@ -60,5 +82,11 @@ def waveform_augment(
 
     if np.random.rand() < prob_shift:
         x = random_time_shift(x)
+
+    if np.random.rand() < prob_resample:
+        x = random_resampling(x)
+        
+    if np.random.rand() < prob_flip:
+        x = x * -1.0
 
     return x
