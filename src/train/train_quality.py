@@ -117,7 +117,7 @@ def main():
     model = LightweightCNN(num_classes=2).to(DEVICE)
     # 1. 使用标签平滑，防止过度拟合
     criterion = nn.CrossEntropyLoss() 
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4) 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
     best_val_loss = float('inf') # 改为监控最小 Loss

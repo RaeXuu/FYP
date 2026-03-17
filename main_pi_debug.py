@@ -5,46 +5,45 @@ import tflite_runtime.interpreter as tflite
 import yaml
 
 # ==========================================
-# 1. 路径修复 (必须放在所有 src 导入之前)
+# 1. 路径修复：确保 Python 能找到 src 包
 # ==========================================
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-if CURRENT_DIR not in sys.path:
-    sys.path.insert(0, CURRENT_DIR)
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-# 打印一下路径，方便出问题时排查
-print(f"📂 当前运行目录: {CURRENT_DIR}")
+# 从你确认存在的 pipeline 脚本中导入预处理函数
+from src.preprocess.preprocess_pipeline import preprocess_wav_for_pi
 
-# ==========================================
-# 2. 动态导入预处理函数
-# ==========================================
-try:
-    # 尝试从 preprocess_inference 导入
-    from src.preprocess.preprocess_inference import preprocess_wav_for_pi
-    print("✅ 成功从 preprocess_inference 导入函数")
-except ImportError:
-    try:
-        # 如果失败，尝试从 preprocess_pipeline 导入
-        from src.preprocess.preprocess_pipeline import preprocess_wav_for_pi
-        print("✅ 成功从 preprocess_pipeline 导入函数")
-    except ImportError as e:
-        print(f"❌ 导入失败！请检查 src/preprocess/ 下是否存在对应的文件。")
-        print(f"错误信息: {e}")
-        sys.exit(1)
+def softmax(x):
+    """将神经网络原始输出(Logits)转换为概率(0-1)"""
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum()
 
 # ==========================================
-# 3. 配置与模型设置
+# 2. 配置与文件路径
 # ==========================================
-QUALITY_MODEL_PATH = "heart_quality_quant.tflite"
-DIAG_MODEL_PATH = "heart_model_quant.tflite"
-# 确保这个文件路径在你电脑上是存在的
-TEST_WAV = "data/raw/DataSet1/set_a/normal__103_1305031931979_B.wav"
+CONFIG_PATH = os.path.join(PROJECT_ROOT, "config.yaml")
+QUALITY_MODEL_PATH = os.path.join(PROJECT_ROOT, "heart_quality_quant.tflite")
+DIAG_MODEL_PATH = os.path.join(PROJECT_ROOT, "heart_model_quant.tflite")
+
+# 使用你刚才 ls 查出的真实存在的文件名
+TEST_WAV = os.path.join(PROJECT_ROOT, "data/raw/DataSet1/set_a/Aunlabelledtest__201101051105.wav")
 
 def main():
-    # A. 加载 config
-    with open(os.path.join(CURRENT_DIR, "config.yaml"), "r") as f:
+    print("🚀 FypProj 双级推理系统 · 最终调试版")
+    print("="*60)
+
+    # A. 文件完整性检查
+    for p in [CONFIG_PATH, QUALITY_MODEL_PATH, DIAG_MODEL_PATH, TEST_WAV]:
+        if not os.path.exists(p):
+            print(f"❌ 错误: 找不到关键文件 {p}")
+            return
+
+    # B. 环境初始化
+    with open(CONFIG_PATH, "r") as f:
         config = yaml.safe_load(f)
 
-    # B. 加载模型
+    # 初始化 TFLite 解释器
     q_interpreter = tflite.Interpreter(model_path=QUALITY_MODEL_PATH)
     d_interpreter = tflite.Interpreter(model_path=DIAG_MODEL_PATH)
     q_interpreter.allocate_tensors()
@@ -55,30 +54,42 @@ def main():
     d_in_idx = d_interpreter.get_input_details()[0]['index']
     d_out_idx = d_interpreter.get_output_details()[0]['index']
 
-    # C. 预处理与推理
-    if not os.path.exists(TEST_WAV):
-        print(f"❌ 找不到音频文件: {TEST_WAV}")
-        return
-
-    print(f"🎧 正在处理: {os.path.basename(TEST_WAV)}")
+    # C. 执行预处理 (滤波 -> 切片 -> Mel 转换)
+    print(f"🎬 正在读取音频并提取特征: {os.path.basename(TEST_WAV)}")
+    # 调用你的 pipeline 进行特征工程
     tensors = preprocess_wav_for_pi(TEST_WAV, config)
+    print(f"📦 预处理成功: 已生成 {len(tensors)} 个 2 秒切片")
+    print("-" * 60)
 
+    # D. 级联推理循环
     for i, input_tensor in enumerate(tensors):
-        # 第一级：质量
+        # --- 第一级：质量评估 (SQA) ---
         q_interpreter.set_tensor(q_in_idx, input_tensor)
         q_interpreter.invoke()
-        q_pred = np.argmax(q_interpreter.get_tensor(q_out_idx))
+        q_logits = q_interpreter.get_tensor(q_out_idx)[0]
+        q_probs = softmax(q_logits)
+        q_pred = np.argmax(q_probs)
 
-        if q_pred == 0:
-            print(f"  Segment {i+1}: ⚠️ 噪声拦截 (Poor Quality)")
-        else:
-            # 第二级：诊断
-            d_interpreter.set_tensor(d_in_idx, input_tensor)
-            d_interpreter.invoke()
-            d_output = d_interpreter.get_tensor(d_out_idx)
-            d_pred = np.argmax(d_output)
-            res = "Abnormal" if d_pred == 1 else "Normal"
-            print(f"  Segment {i+1}: ✨ {res} (置信度: {np.max(d_output):.2f})")
+        if q_pred == 0:  # 0 代表 Poor Quality
+            print(f"片段 {i+1:02d}: ⚠️  [质量拦截] 信号干扰过强 | 噪声概率: {q_probs[0]:.2%}")
+            continue
+        
+        # --- 第二级：疾病诊断 ---
+        d_interpreter.set_tensor(d_in_idx, input_tensor)
+        d_interpreter.invoke()
+        d_logits = d_interpreter.get_tensor(d_out_idx)[0]
+        
+        # 核心修正：应用 Softmax 得到 0-1 的置信度
+        d_probs = softmax(d_logits)
+        d_pred = np.argmax(d_probs)
+        
+        label = "Normal (正常)" if d_pred == 0 else "Abnormal (异常)"
+        confidence = d_probs[d_pred]
+        
+        print(f"片段 {i+1:02d}: ✨ [诊断通过] 结果: {label} | 置信度: {confidence:.2%}")
+
+    print("="*60)
+    print("✅ 离线验证任务圆满完成。")
 
 if __name__ == "__main__":
     main()
