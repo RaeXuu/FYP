@@ -2,9 +2,9 @@
 plot_wave.py — 心音波形 & 频谱调试工具（在电脑上运行）
 
 用法：
-  python plot_wave.py debug_raw_xxx.wav debug_2k_xxx.wav   # 同时对比两条
-  python plot_wave.py debug_raw_xxx.wav                    # 只看原始
-  python plot_wave.py                                      # 自动找当前目录最新的 debug_*.wav
+  python pc_plot_wave.py debug_raw_xxx.wav debug_2k_xxx.wav   # 同时对比两条
+  python pc_plot_wave.py debug_raw_xxx.wav                    # 只看原始
+  python pc_plot_wave.py                                      # 自动找当前目录最新的 debug_*.wav
 """
 
 import sys

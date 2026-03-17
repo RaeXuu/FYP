@@ -2,9 +2,9 @@
 gen_test_tone.py — 正弦波测试音生成器（在电脑上运行）
 
 用法：
-  python gen_test_tone.py 100          # 生成 100Hz，持续 5 秒
-  python gen_test_tone.py 100 200 400  # 一次生成多个频率
-  python gen_test_tone.py 100 10       # 生成 100Hz，持续 10 秒
+  python pc_gen_test_tone.py 100          # 生成 100Hz，持续 5 秒
+  python pc_gen_test_tone.py 100 200 400  # 一次生成多个频率
+  python pc_gen_test_tone.py 100 10       # 生成 100Hz，持续 10 秒
 """
 
 import sys

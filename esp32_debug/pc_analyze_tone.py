@@ -2,8 +2,8 @@
 analyze_tone.py — 正弦波传输质量分析工具（在电脑上运行）
 
 用法：
-  python analyze_tone.py 100hz_og.wav 000_2k.wav 100
-  python analyze_tone.py 100hz_og.wav 000_raw.wav 100
+  python pc_analyze_tone.py 100hz_og.wav 000_2k.wav 100
+  python pc_analyze_tone.py 100hz_og.wav 000_raw.wav 100
 
 参数：
   <og_wav>       原始生成的正弦波文件
