@@ -149,7 +149,7 @@ def main():
             torch.save(model.state_dict(), MODEL_PATH)
             print(f"✅ New lowest loss model saved! Loss={best_val_loss:.4f}")
 
-    print(f"\nTraining finished. Best Val Acc={best_acc:.4f}")
+    print(f"\nTraining finished. Best Val Acc={best_val_loss:.4f}")
     print(f"Model saved to: {MODEL_PATH}")
 
 if __name__ == "__main__":
