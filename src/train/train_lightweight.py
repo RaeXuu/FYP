@@ -48,7 +48,8 @@ from src.model.lightweight_cnn import LightweightCNN
 
 # === 训练参数 ===
 BATCH_SIZE = 16
-EPOCHS = 25
+EPOCHS = 50
+EARLY_STOP_PATIENCE = 10
 LEARNING_RATE = 1e-3
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_PATH = os.path.join(PROJECT_ROOT, "checkpoints", "best_model.pth")
@@ -227,13 +228,14 @@ def main():
     # === 模型、loss、优化器 ===
     # model = LightweightCNN(num_classes=5).to(DEVICE)
     model = LightweightCNN(num_classes=2).to(DEVICE)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
 
     # 在优化器定义后加入
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)
 
     best_mscore = 0.0
+    patience_counter = 0
 
     for epoch in range(1, EPOCHS + 1):
         print(f"\nEpoch [{epoch}/{EPOCHS}]")
@@ -283,11 +285,19 @@ def main():
         # === 保存最优模型（基于 M-Score）===
         if m_score > best_mscore:
             best_mscore = m_score
+            patience_counter = 0
             torch.save(model.state_dict(), MODEL_PATH)
             print(f"✅ New best model saved! M-Score={best_mscore:.4f} (Se={se:.4f}, Sp={sp:.4f})")
             wandb.summary["best_val_m_score"] = best_mscore
             wandb.summary["best_val_se"] = se
             wandb.summary["best_val_sp"] = sp
+        else:
+            patience_counter += 1
+            print(f"  No improvement. Patience: {patience_counter}/{EARLY_STOP_PATIENCE}")
+            if patience_counter >= EARLY_STOP_PATIENCE:
+                print(f"⏹ Early stopping at epoch {epoch}.")
+                wandb.log({"early_stop_epoch": epoch})
+                break
 
     print(f"\nTraining finished. Best Val M-Score={best_mscore:.4f}")
     print(f"Model saved to: {MODEL_PATH}")

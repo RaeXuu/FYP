@@ -100,7 +100,7 @@ from src.preprocess.mel import logmel_fixed_size
 from src.augment.wav_augment import waveform_augment
 
 class HeartSoundMelDataset(Dataset):
-    def __init__(self, metadata_path, sr, segment_sec, mel_cfg, transform=None, augment=False):
+    def __init__(self, metadata_path, sr, segment_sec, mel_cfg, transform=None, augment=False, overlap=None):
         # 1. 直接读取生成的 metadata_physionet.csv
         self.df = pd.read_csv(metadata_path)
         self.sr = sr
@@ -108,6 +108,7 @@ class HeartSoundMelDataset(Dataset):
         self.transform = transform
         self.augment = augment
         self.mel_cfg = mel_cfg
+        self.overlap = overlap  # None 时 segment_audio 自动读 config.yaml
 
         # 2. ✅ 适配二分类：PhysioNet 2016 标签已经是 0 和 1，不再需要 valid_labels 列表
         # 直接使用 int(row["label"]) 即可
@@ -125,7 +126,7 @@ class HeartSoundMelDataset(Dataset):
             y = apply_bandpass(y, fs=self.sr, lowcut=25, highcut=400)
 
             # 切片处理
-            segments = segment_audio(y, sr=self.sr)
+            segments = segment_audio(y, sr=self.sr, overlap=self.overlap)
             for seg in segments:
                 self.samples.append((seg, label, fname))
 

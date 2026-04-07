@@ -14,12 +14,14 @@ data_cfg = cfg["data"]
 # =========================
 # Segment function
 # =========================
-def segment_audio(y, sr):
+def segment_audio(y, sr, overlap=None):
     """
     根据 config.yaml 中的参数切片音频
+    overlap 可以通过参数覆盖 config.yaml 中的值（用于 sweep）
     """
     segment_sec = data_cfg["segment_length"]
-    overlap = data_cfg["overlap"]
+    if overlap is None:
+        overlap = data_cfg["overlap"]
 
     seg_len = int(sr * segment_sec)
     hop = int(seg_len * (1 - overlap))

@@ -60,6 +60,50 @@ n_mels: 32 | fmin: 20 | fmax: 400 | power: 2.0
 
 ---
 
+### Run 2 — 2026-04-07（Label Smoothing + Early Stopping）
+
+**相比 Run 1 的改动**
+```
+CrossEntropyLoss(label_smoothing=0.1)
+Early Stopping: patience=10
+EPOCHS: 25 → 50（实际第 16 epoch 触发 early stopping）
+```
+
+**Val 最优（Epoch 6）**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.9106 |
+| Sensitivity | 0.9238 |
+| Specificity | 0.8974 |
+
+**Test 集最终结果**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.8816 |
+| Sensitivity | 0.9181 |
+| Specificity | 0.8452 |
+| Accuracy | 0.8589 |
+| Test Loss | 0.4056 |
+
+**wandb Run:** `diagnostic-model` → [heart-sound-fyp](https://wandb.ai/xrjgoole-google/heart-sound-fyp/runs/l7adpejw)
+
+**与 Run 1 对比**
+| 指标 | Run 1 | Run 2 | 变化 |
+|------|-------|-------|------|
+| Test M-Score | 0.8852 | 0.8816 | -0.004 |
+| Test Se | 0.9569 | 0.9181 | -0.039 |
+| Test Sp | 0.8135 | 0.8452 | +0.032 |
+| Se/Sp 差距 | 0.143 | 0.073 | 缩小一半 |
+| 停止 epoch | 25 | 16 | 更高效 |
+
+**分析**
+- Se/Sp 更平衡，但 M-Score 基本持平（差距在误差范围内）
+- 无法确定 Se/Sp 变动是由 label smoothing 还是 early stopping 单独造成的（两者同时改变）
+- 家庭筛查场景下 Run 1（高 Se）更合适，漏诊代价远高于误报
+- 注意：Run 2 已覆盖 `best_model.pth`，需重训或 sweep 后确定最终模型
+
+---
+
 ## SQA 模型（LightweightCNN）
 
 *(待填)*
