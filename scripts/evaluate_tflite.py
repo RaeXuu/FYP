@@ -1,11 +1,12 @@
 import os
 import sys
+import csv
 import time
 import torch
 import numpy as np
 import pandas as pd
 import yaml
-import tflite_runtime.interpreter as tflite
+import ai_edge_litert.interpreter as tflite
 from sklearn.metrics import classification_report, recall_score
 from torch.utils.data import Subset
 from pathlib import Path
@@ -17,19 +18,24 @@ if PROJECT_ROOT not in sys.path:
 
 from src.train.dataset.dataset_mel import HeartSoundMelDataset
 
-def get_test_subset(dataset, split_seed=42, train_ratio=0.8):
+def get_test_subset(dataset, split_csv):
     """
-    使用与训练脚本完全相同的逻辑隔离出 20% 的测试集
+    从指定的 split CSV 文件加载固定 test 集 fname 列表。
+    split_csv: test_split.csv（诊断模型）或 quality_test_split.csv（质量模型）
     """
-    rng = np.random.RandomState(split_seed)
+    if not os.path.exists(split_csv):
+        raise FileNotFoundError(
+            f"找不到 {split_csv}，请先运行对应训练脚本生成 split 文件"
+        )
+
+    with open(split_csv, newline="") as f:
+        reader = csv.DictReader(f)
+        test_fnames = set(row["fname"] for row in reader)
+
     all_fnames = [dataset.get_fname(i) for i in range(len(dataset))]
-    unique_fnames = np.unique(all_fnames)
-    rng.shuffle(unique_fnames)
-    
-    n_train_rec = int(train_ratio * len(unique_fnames))
-    test_rec_ids = set(unique_fnames[n_train_rec:])
-    
-    test_indices = [idx for idx, fname in enumerate(all_fnames) if fname in test_rec_ids]
+    test_indices = [idx for idx, fname in enumerate(all_fnames) if fname in test_fnames]
+
+    print(f"  ✅ 从 {os.path.basename(split_csv)} 加载 test 集，匹配切片数: {len(test_indices)}")
     return Subset(dataset, test_indices)
 
 def evaluate_single_tflite(model_path, subset, target_names):
@@ -90,6 +96,7 @@ def main():
         {
             "name": "Diagnosis (疾病诊断)",
             "metadata": os.path.join(PROJECT_ROOT, "data/metadata_physionet.csv"),
+            "split_csv": os.path.join(PROJECT_ROOT, "data/test_split.csv"),
             "labels": ['Normal', 'Abnormal'],
             "models": {
                 "Diag_FP32": os.path.join(PROJECT_ROOT, "heart_model_fp32.tflite"),
@@ -99,6 +106,7 @@ def main():
         {
             "name": "Quality (质量评估)",
             "metadata": os.path.join(PROJECT_ROOT, "data/metadata_quality.csv"),
+            "split_csv": os.path.join(PROJECT_ROOT, "data/quality_test_split.csv"),
             "labels": ['Poor_Quality', 'Good_Quality'],
             "models": {
                 "Qual_FP32": os.path.join(PROJECT_ROOT, "heart_quality_fp32.tflite"),
@@ -112,7 +120,7 @@ def main():
     for task in tasks:
         print(f"\n" + "="*50)
         print(f"📊 正在加载任务数据集: {task['name']}")
-        
+
         full_dataset = HeartSoundMelDataset(
             metadata_path=task["metadata"],
             sr=cfg["data"]["sample_rate"],
@@ -120,7 +128,7 @@ def main():
             mel_cfg=cfg["mel"]
         )
 
-        test_subset = get_test_subset(full_dataset)
+        test_subset = get_test_subset(full_dataset, task["split_csv"])
         print(f"✅ 隔离 20% 测试集成功，共 {len(test_subset)} 个切片")
 
         for model_name, path in task["models"].items():

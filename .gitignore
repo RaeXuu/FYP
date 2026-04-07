@@ -1,9 +1,14 @@
+# --- Virtual environment ---
+FypProj/
+
 # --- Python general ---
 __pycache__/
 *.pyc
 
 # --- Project data (large, private, unnecessary) ---
 data/
+!data/test_split.csv
+!data/quality_test_split.csv
 models/
 
 # --- Jupyter ---
@@ -25,6 +30,12 @@ notebooks/.ipynb_checkpoints/
 # --- Logs / cache ---
 logs/
 *.log
+
+# --- wandb local logs ---
+wandb/
+
+# --- Wheel files ---
+*.whl
 
 # --- Temporary files ---
 .DS_Store

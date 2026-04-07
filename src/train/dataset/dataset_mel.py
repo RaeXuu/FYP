@@ -75,7 +75,7 @@
 
 
 # if __name__ == "__main__":
-#     ds = HeartSoundMelDataset("/mnt/d/FypProj/data/metadata1.csv")
+#     ds = HeartSoundMelDataset("/home/agiuser/FypProj/data/metadata1.csv")
 #     print("Dataset 总长度（切片数）:", len(ds))
 #     mel, label = ds[0]
 #     print("单个 Mel shape:", mel.shape)
@@ -166,7 +166,7 @@ if __name__ == "__main__":
         config = yaml.safe_load(f)
 
     # ✅ 指向正确的文件
-    METADATA_PATH = "/mnt/d/FypProj/data/metadata_physionet.csv"
+    METADATA_PATH = "/home/agiuser/FypProj/data/metadata_physionet.csv"
     
     if os.path.exists(METADATA_PATH):
         ds = HeartSoundMelDataset(

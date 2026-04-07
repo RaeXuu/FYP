@@ -7,15 +7,16 @@ if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
 import numpy as np
-from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.metrics import confusion_matrix, classification_report, recall_score
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 
 import yaml
 from pathlib import Path
 from pprint import pprint
+import wandb
 
 
 
@@ -119,6 +120,24 @@ def main():
     pprint(cfg)
     print("=" * 60 + "\n")
 
+    wandb.init(
+        project="heart-sound-fyp",
+        name="diagnostic-dev",
+        config={
+            "model": "LightweightCNN",
+            "feature": FEATURE_TYPE,
+            "batch_size": BATCH_SIZE,
+            "epochs": EPOCHS,
+            "lr": LEARNING_RATE,
+            "weight_decay": 1e-4,
+            "scheduler": "ReduceLROnPlateau(factor=0.5, patience=3)",
+            "split": "80/20",
+            "sampler": "WeightedRandomSampler",
+            "save_criterion": "val_m_score",
+            **cfg,
+        }
+    )
+
     # =========================
     # Paths
     # =========================
@@ -176,16 +195,18 @@ def main():
 
     train_indices = []
     val_indices   = []
+    train_labels  = []
 
     # 2️⃣ 按 fname 分配每一个切片
     for idx, fname in enumerate(all_fnames):
         if fname in train_rec_ids:
             train_indices.append(idx)
+            train_labels.append(train_dataset.samples[idx][1])
         else:
             val_indices.append(idx)
 
     train_ds = torch.utils.data.Subset(train_dataset, train_indices)
-    val_ds   = torch.utils.data.Subset(train_dataset, val_indices)
+    val_ds   = torch.utils.data.Subset(val_dataset, val_indices)
 
     print("[Group Split by fname]")
     print(f"  train samples = {len(train_ds)}")
@@ -193,8 +214,14 @@ def main():
     print(f"  unique train recordings = {len(train_rec_ids)}")
     print(f"  unique val   recordings = {len(val_rec_ids)}")
 
+    # === WeightedRandomSampler（处理 4:1 类别不平衡）===
+    class_counts = np.bincount(train_labels)
+    weights = 1. / class_counts
+    sample_weights = torch.tensor([weights[l] for l in train_labels])
+    sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
+    print(f"  class counts = {class_counts} | weights = {weights.round(4)}")
 
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, sampler=sampler)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
 
     # === 模型、loss、优化器 ===
@@ -206,7 +233,7 @@ def main():
     # 在优化器定义后加入
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)
 
-    best_acc = 0.0
+    best_mscore = 0.0
 
     for epoch in range(1, EPOCHS + 1):
         print(f"\nEpoch [{epoch}/{EPOCHS}]")
@@ -214,38 +241,57 @@ def main():
         train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer)
         val_loss, val_acc, y_true, y_pred = evaluate(model, val_loader, criterion)
 
-        # 在每个 Epoch 结束打印指标后加入
+        # 计算 M-Score = (Sensitivity + Specificity) / 2
+        se = recall_score(y_true, y_pred, pos_label=1)
+        sp = recall_score(y_true, y_pred, pos_label=0)
+        m_score = (se + sp) / 2
+
         current_lr = optimizer.param_groups[0]['lr']
         print(f"Current Learning Rate: {current_lr:.6f}")
-        # 在每个 Epoch 的 evaluate 之后更新
-        scheduler.step(val_acc)
+        scheduler.step(m_score)
 
         print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}")
         print(f"Val   Loss: {val_loss:.4f} | Val   Acc: {val_acc:.4f}")
-        # === Validation metrics (Confusion Matrix & Recall) ===
-        # class_names = ['artifact', 'extrahls', 'extrastole', 'murmur', 'normal']
-        class_names = ['Normal', 'Abnormal']
+        print(f"Val   Se: {se:.4f} | Sp: {sp:.4f} | M-Score: {m_score:.4f}")
 
+        class_names = ['Normal', 'Abnormal']
         cm = confusion_matrix(y_true, y_pred)
         print("\n[Validation] Confusion Matrix:")
         print(cm)
 
         print("\n[Validation] Classification Report:")
-        print(classification_report(
-            y_true,
-            y_pred,
-            target_names=class_names,
-            digits=4
-        ))
+        print(classification_report(y_true, y_pred, target_names=class_names, digits=4))
 
-        # === 保存最优模型 ===
-        if val_acc > best_acc:
-            best_acc = val_acc
+        wandb.log({
+            "epoch": epoch,
+            "lr": current_lr,
+            "train/loss": train_loss,
+            "train/acc": train_acc,
+            "val/loss": val_loss,
+            "val/acc": val_acc,
+            "val/sensitivity": se,
+            "val/specificity": sp,
+            "val/m_score": m_score,
+            "val/conf_matrix": wandb.plot.confusion_matrix(
+                probs=None,
+                y_true=y_true.tolist(),
+                preds=y_pred.tolist(),
+                class_names=class_names,
+            ),
+        })
+
+        # === 保存最优模型（基于 M-Score）===
+        if m_score > best_mscore:
+            best_mscore = m_score
             torch.save(model.state_dict(), MODEL_PATH)
-            print(f"✅ New best model saved! Acc={best_acc:.4f}")
+            print(f"✅ New best model saved! M-Score={best_mscore:.4f} (Se={se:.4f}, Sp={sp:.4f})")
+            wandb.summary["best_val_m_score"] = best_mscore
+            wandb.summary["best_val_se"] = se
+            wandb.summary["best_val_sp"] = sp
 
-    print(f"\nTraining finished. Best Val Acc={best_acc:.4f}")
+    print(f"\nTraining finished. Best Val M-Score={best_mscore:.4f}")
     print(f"Model saved to: {MODEL_PATH}")
+    wandb.finish()
 
 
 if __name__ == "__main__":

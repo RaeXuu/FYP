@@ -102,7 +102,7 @@ class HeartSoundWaveletDataset(Dataset):
 # ==========================
 if __name__ == "__main__":
     ds = HeartSoundWaveletDataset(
-        "/mnt/d/FypProj/data/metadata1.csv",
+        "/home/agiuser/FypProj/data/metadata1.csv",
         out_size=64,
     )
 

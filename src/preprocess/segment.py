@@ -49,7 +49,7 @@ if __name__ == "__main__":
     from src.preprocess.load_wav import load_wav
     from src.preprocess.filters import apply_bandpass
 
-    df = pd.read_csv("/mnt/d/FypProj/data/metadata_physionet.csv")
+    df = pd.read_csv("/home/agiuser/FypProj/data/metadata_physionet.csv")
     path = df.iloc[0]["filepath"]
 
     print("测试样本:", path)

@@ -15,7 +15,7 @@
 # from src.preprocess.bicoherence_2d import bicoherence_2d
 # from src.preprocess.utils.visualize import *
 
-# df = pd.read_csv("/mnt/d/FypProj/data/metadata1.csv")
+# df = pd.read_csv("/home/agiuser/FypProj/data/metadata1.csv")
 # path = df.iloc[95]["filepath"]
 # # fill in need to substract 2 in advance
 # # 2-41 artifact
@@ -74,7 +74,7 @@ data_cfg = config["data"]
 mel_cfg = config["mel"]
 
 # ---- 📂 加载数据 ----
-df = pd.read_csv("/mnt/d/FypProj/data/metadata_physionet.csv")   
+df = pd.read_csv("/home/agiuser/FypProj/data/metadata_physionet.csv")   
 # 取一个样本做可视化测试
 path = df.iloc[0]["filepath"]
 

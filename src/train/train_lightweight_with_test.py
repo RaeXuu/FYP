@@ -7,15 +7,17 @@ if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
 import numpy as np
+import csv
 from sklearn.metrics import confusion_matrix, classification_report, recall_score
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 
 import yaml
 from pathlib import Path
 from pprint import pprint
+import wandb
 
 # =========================
 # Experiment setting
@@ -109,6 +111,24 @@ def main():
     pprint(cfg)
     print("=" * 60 + "\n")
 
+    wandb.init(
+        project="heart-sound-fyp",
+        name="diagnostic-model",
+        config={
+            "model": "LightweightCNN",
+            "feature": FEATURE_TYPE,
+            "batch_size": BATCH_SIZE,
+            "epochs": EPOCHS,
+            "lr": LEARNING_RATE,
+            "weight_decay": 1e-4,
+            "scheduler": "ReduceLROnPlateau(factor=0.5, patience=3)",
+            "split": "80/10/10",
+            "sampler": "WeightedRandomSampler",
+            "save_criterion": "val_m_score",
+            **cfg,
+        }
+    )
+
     metadata_path = os.path.join(PROJECT_ROOT, "data", "metadata_physionet.csv")
 
     data_cfg = cfg["data"]
@@ -142,9 +162,11 @@ def main():
     test_rec_ids  = set(unique_fnames[idx_val:])
 
     train_indices, val_indices, test_indices = [], [], []
+    train_labels = []
     for idx, fname in enumerate(all_fnames):
         if fname in train_rec_ids:
             train_indices.append(idx)
+            train_labels.append(train_dataset.samples[idx][1])
         elif fname in val_rec_ids:
             val_indices.append(idx)
         else:
@@ -157,9 +179,29 @@ def main():
 
     print("[Group Split by fname (80/10/10)]")
     print(f"  train samples = {len(train_ds)} | val samples = {len(val_ds)} | test samples = {len(test_ds)}")
+
+    # === 持久化 test 集 fname 列表（锁住，不再改动）===
+    test_split_path = os.path.join(PROJECT_ROOT, "data", "test_split.csv")
+    if not os.path.exists(test_split_path):
+        test_fnames = [train_dataset.get_fname(i) for i in test_indices]
+        with open(test_split_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["fname"])
+            for fname in test_fnames:
+                writer.writerow([fname])
+        print(f"  ✅ test_split.csv 已保存: {test_split_path}")
+    else:
+        print(f"  ℹ️  test_split.csv 已存在，跳过写入")
+
+    # === WeightedRandomSampler（处理 4:1 类别不平衡）===
+    class_counts = np.bincount(train_labels)
+    weights = 1. / class_counts
+    sample_weights = torch.tensor([weights[l] for l in train_labels])
+    sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
+    print(f"  class counts = {class_counts} | weights = {weights.round(4)}")
     # ==========================================================================
 
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, sampler=sampler)
     val_loader   = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
     test_loader  = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False)
 
@@ -168,7 +210,7 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)
 
-    best_acc = 0.0
+    best_mscore = 0.0
 
     for epoch in range(1, EPOCHS + 1):
         print(f"\nEpoch [{epoch}/{EPOCHS}]")
@@ -176,12 +218,17 @@ def main():
         train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer)
         val_loss, val_acc, y_true, y_pred = evaluate(model, val_loader, criterion)
 
-        scheduler.step(val_acc)
+        # 计算 M-Score = (Sensitivity + Specificity) / 2
+        se = recall_score(y_true, y_pred, pos_label=1)
+        sp = recall_score(y_true, y_pred, pos_label=0)
+        m_score = (se + sp) / 2
 
-        # 这里完全保留了你原本 train_lightweight.py 的打印风格
+        scheduler.step(m_score)
+
         print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}")
         print(f"Val   Loss: {val_loss:.4f} | Val   Acc: {val_acc:.4f}")
-        
+        print(f"Val   Se: {se:.4f} | Sp: {sp:.4f} | M-Score: {m_score:.4f}")
+
         class_names = ['Normal', 'Abnormal']
         cm = confusion_matrix(y_true, y_pred)
         print("\n[Validation] Confusion Matrix:")
@@ -190,10 +237,31 @@ def main():
         print("\n[Validation] Classification Report:")
         print(classification_report(y_true, y_pred, target_names=class_names, digits=4))
 
-        if val_acc > best_acc:
-            best_acc = val_acc
+        wandb.log({
+            "epoch": epoch,
+            "lr": optimizer.param_groups[0]['lr'],
+            "train/loss": train_loss,
+            "train/acc": train_acc,
+            "val/loss": val_loss,
+            "val/acc": val_acc,
+            "val/sensitivity": se,
+            "val/specificity": sp,
+            "val/m_score": m_score,
+            "val/conf_matrix": wandb.plot.confusion_matrix(
+                probs=None,
+                y_true=y_true.tolist(),
+                preds=y_pred.tolist(),
+                class_names=class_names,
+            ),
+        })
+
+        if m_score > best_mscore:
+            best_mscore = m_score
             torch.save(model.state_dict(), MODEL_PATH)
-            print(f"✅ New best model saved! Acc={best_acc:.4f}")
+            print(f"✅ New best model saved! M-Score={best_mscore:.4f} (Se={se:.4f}, Sp={sp:.4f})")
+            wandb.summary["best_val_m_score"] = best_mscore
+            wandb.summary["best_val_se"] = se
+            wandb.summary["best_val_sp"] = sp
 
     # ==========================================================================
     # 【新增改动点 3】：训练结束后，在完全未见的测试集上进行最终评估 (高考)
@@ -202,15 +270,22 @@ def main():
     model.load_state_dict(torch.load(MODEL_PATH))
     
     test_loss, test_acc, y_true_test, y_pred_test = evaluate(model, test_loader, criterion)
-    
+
     # 计算 PhysioNet 官方 M-score
     se = recall_score(y_true_test, y_pred_test, pos_label=1)
     sp = recall_score(y_true_test, y_pred_test, pos_label=0)
     m_score = (se + sp) / 2
-    
+
     print(f"Test Loss: {test_loss:.4f} | Test Acc: {test_acc:.4f} | M-Score: {m_score:.4f}")
     print("\n[Test Set] Classification Report:")
     print(classification_report(y_true_test, y_pred_test, target_names=['Normal', 'Abnormal'], digits=4))
+
+    wandb.summary["test_loss"] = test_loss
+    wandb.summary["test_acc"] = test_acc
+    wandb.summary["test_sensitivity"] = se
+    wandb.summary["test_specificity"] = sp
+    wandb.summary["test_m_score"] = m_score
+    wandb.finish()
 
 
 if __name__ == "__main__":

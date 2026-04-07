@@ -4,7 +4,7 @@
 # import numpy as np
 
 # # 根目录
-# BASE_DIR = "/mnt/d/FypProj/data/raw/DataSet1"
+# BASE_DIR = "/home/agiuser/FypProj/data/raw/DataSet1"
 
 # def clean_fname(fname):
 #     """
@@ -63,7 +63,7 @@
 #     print(df.head())
 #     print("总样本数:", len(df))
 
-#     output_path = "/mnt/d/FypProj/data/metadata1.csv"
+#     output_path = "/home/agiuser/FypProj/data/metadata1.csv"
 #     df.to_csv(output_path, index=False, encoding="utf-8")
 
 #     print(f"已保存 metadata 到: {output_path}")
@@ -71,7 +71,7 @@
 import os
 import pandas as pd
 
-def load_metadata(base_dir="/mnt/d/FypProj/data/raw/Dataset2"):
+def load_metadata(base_dir="/home/agiuser/FypProj/data/raw/DataSet2"):
     all_data = []
     
     for c in 'abcdef':
@@ -112,4 +112,4 @@ if __name__ == "__main__":
     df = load_metadata()
     print(f"✅ 处理完成，有效样本数: {len(df)}")
     print(df["label"].value_counts())
-    df.to_csv("/mnt/d/FypProj/data/metadata_physionet.csv", index=False)
+    df.to_csv("/home/agiuser/FypProj/data/metadata_physionet.csv", index=False)

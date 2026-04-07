@@ -2,8 +2,8 @@ import os
 import pandas as pd
 import numpy as np
 
-def generate_quality_metadata(base_dir="/mnt/d/FypProj/data/raw/Dataset2", 
-                             output_path="/mnt/d/FypProj/data/metadata_quality.csv"):
+def generate_quality_metadata(base_dir="/home/agiuser/FypProj/data/raw/DataSet2", 
+                             output_path="/home/agiuser/FypProj/data/metadata_quality.csv"):
     all_data = []
     
     # 遍历 PhysioNet 2016 的子数据集 a-f

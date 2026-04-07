@@ -67,7 +67,7 @@ if __name__ == "__main__":
     import pandas as pd
     from src.preprocess.load_wav import load_wav
 
-    meta_path = "/mnt/d/FypProj/data/metadata_physionet.csv"
+    meta_path = "/home/agiuser/FypProj/data/metadata_physionet.csv"
     df = pd.read_csv(meta_path)
 
     first_path = df.iloc[0]["filepath"]

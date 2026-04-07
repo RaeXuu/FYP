@@ -66,7 +66,7 @@
 
 # if __name__ == "__main__":
 #     # TODO: 测试用：从 metadata1.csv 加载
-#     df = pd.read_csv("/mnt/d/FypProj/data/metadata1.csv")
+#     df = pd.read_csv("/home/agiuser/FypProj/data/metadata1.csv")
     
 #     # 先加载前三个测试
 #     audios = batch_load_from_metadata(df.head(3))  
@@ -151,7 +151,7 @@ def batch_load_from_metadata(df, sr=None):
 
 if __name__ == "__main__":
     # 1. 这里的路径改为我们刚生成的 PhysioNet 元数据
-    df = pd.read_csv("/mnt/d/FypProj/data/metadata_physionet.csv")
+    df = pd.read_csv("/home/agiuser/FypProj/data/metadata_physionet.csv")
     
     # 2. 这里的 sr 保持你之前的逻辑，或者改为 data_cfg["sample_rate"]
     target_sr = data_cfg["sample_rate"]
