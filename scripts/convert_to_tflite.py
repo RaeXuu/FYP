@@ -24,8 +24,8 @@ def convert_model(task_name, pth_path, output_prefix):
         print(f"❌ 错误: 找不到权重文件 {pth_path}，跳过此任务。")
         return
 
-    # 统一输入形状 (1, 1, 32, 64)
-    input_shape = (1, 1, 32, 64) 
+    # 输入形状：(batch=1, channel=1, n_mels=64, time=64)
+    input_shape = (1, 1, 64, 64)
     sample_input = torch.randn(input_shape)
 
     # 实例化模型 (诊断和质量现在都是二分类)
@@ -65,8 +65,8 @@ def main():
         os.path.join(PROJECT_ROOT, "checkpoints/best_model.pth"), 
         os.path.join(PROJECT_ROOT, "heart_model")],
         
-        ["quality", 
-        os.path.join(PROJECT_ROOT, "checkpoints/quality_model_best.pth"), 
+        ["quality",
+        os.path.join(PROJECT_ROOT, "checkpoints/best_model_sqa.pth"),
         os.path.join(PROJECT_ROOT, "heart_quality")]
     ]
 

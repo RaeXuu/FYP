@@ -105,9 +105,9 @@ def main():
         },
         {
             "name": "Quality (质量评估)",
-            "metadata": os.path.join(PROJECT_ROOT, "data/metadata_quality.csv"),
-            "split_csv": os.path.join(PROJECT_ROOT, "data/quality_test_split.csv"),
-            "labels": ['Poor_Quality', 'Good_Quality'],
+            "metadata": os.path.join(PROJECT_ROOT, "data/metadata_quality_reversed.csv"),
+            "split_csv": os.path.join(PROJECT_ROOT, "data/test_split_sqa.csv"),
+            "labels": ['Good', 'Bad'],
             "models": {
                 "Qual_FP32": os.path.join(PROJECT_ROOT, "heart_quality_fp32.tflite"),
                 "Qual_INT8": os.path.join(PROJECT_ROOT, "heart_quality_quant.tflite")
