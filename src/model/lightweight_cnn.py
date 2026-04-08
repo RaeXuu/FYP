@@ -70,7 +70,7 @@ class LightweightCNN(nn.Module):
     """
     升级版轻量级 CNN (PhysioNet 2016 二分类专用)
     """
-    def __init__(self, num_classes=2, in_channels=1):
+    def __init__(self, num_classes=2, in_channels=1, dropout=0.3):
         super().__init__()
 
         # 第一层：普通卷积 (16 -> 32)
@@ -99,7 +99,7 @@ class LightweightCNN(nn.Module):
         self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
 
         self.classifier = nn.Sequential(
-            nn.Dropout(0.3), # 增加 Dropout 缓解过拟合
+            nn.Dropout(dropout),
             nn.Linear(256, num_classes)
         )
 
