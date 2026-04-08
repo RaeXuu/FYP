@@ -89,7 +89,7 @@ Test集：无
 ```
 数据集：metadata_physionet.csv（2876 条）
 划分：80/10/10，按 recording（fname）分组，seed=42
-Train：~2300 切片 | Val：~288 切片 | Test：~288 切片
+Train：~2300 录音 / ~49833 切片 | Val：~288 录音 / ~5897 切片 | Test：~288 录音 / ~6273 切片
 augment：Train=True，Val/Test=False
 类别平衡：WeightedRandomSampler（1/class_count）
 保存标准：Val M-Score 最大
@@ -97,24 +97,24 @@ Test集：训练结束后加载最优模型跑一次，输出 M-Score
 持久化：首次运行将 test fname 列表写入 data/test_split.csv（已存在则跳过）
 ```
 
-### `train_quality.py`（SQA 模型专用）
+### `train_sqa_with_test.py`（SQA 模型专用）
 
 ```
-数据集：metadata_quality.csv（3240 条，含 364 Bad Quality）
+数据集：metadata_quality_reversed.csv（3240 条，Good=2876 / Bad=364，标签已反转）
 划分：80/10/10，按 recording（fname）分组，seed=42
-Train：~2592 切片 | Val：~324 切片 | Test：~324 切片
+Train：~2592 录音 / ~54842 切片 | Val：~324 录音 / ~6536 切片 | Test：~324 录音 / ~6726 切片
 augment：Train=True，Val/Test=False
 类别平衡：WeightedRandomSampler（1/class_count，8:1 不平衡）
 保存标准：Val M-Score 最大
-Test集：训练后可用 evaluate_tflite.py 评估
-持久化：首次运行将 test fname 列表写入 data/quality_test_split.csv
+Test集：训练结束后加载最优模型跑一次，输出 M-Score
+持久化：首次运行将 test fname 列表写入 data/test_split_sqa.csv（已存在则跳过）
 ```
 
 ### `evaluate_tflite.py`（Pi 上跑，最终指标）
 
 ```
 诊断模型：读取 data/test_split.csv（由 train_lightweight_with_test.py 生成）
-质量模型：读取 data/quality_test_split.csv（由 train_quality.py 生成）
+质量模型：读取 data/test_split_sqa.csv（由 train_sqa_with_test.py 生成）
 对各模型加载 FP32 和 INT8 两个 tflite 文件分别评估
 输出：Accuracy / M-Score / 推理延迟 / 模型大小 对比表
 注意：质量模型 test 集包含 Bad Quality 录音，评估结果更可信
@@ -191,7 +191,7 @@ Test集：训练后可用 evaluate_tflite.py 评估
 
 | 模型 | 参数量 | Pi 4B INT8 推理延迟（约） |
 |------|--------|--------------------------|
-| 当前 CNN + CoordAtt | ~200K | <10ms |
+| 当前 CNN + CoordAtt | ~65K | <10ms |
 | MobileNetV2 | 3.4M | ~50ms |
 | EfficientNet-B0 | 5.3M | ~100ms |
 | ResNet-18 | 11M | ~200ms |
@@ -216,14 +216,18 @@ Test集：训练后可用 evaluate_tflite.py 评估
 - **DiT**：图像生成模型，与分类任务无关
 - **Mamba**：依赖自定义 CUDA kernel，Pi CPU 无高效实现，TFLite 不支持
 
-### 消融实验设计（论文贡献）
-```
-baseline CNN（无注意力）
-→ + CoordAtt（当前设计）
-→ + 残差连接
-→ 量化对比（FP32 vs INT8）
-```
-每步对比 Sensitivity / Specificity / M-Score，可作为架构设计章节的实验支撑。
+### 消融实验结论（已完成）
+
+四组累进式消融，固定预处理参数（n_mels=32, hop=96）和训练参数（batch=16, lr=1e-3, wd=1e-4）：
+
+| 配置 | 参数量 | Test M-Score | Test Se | Test Sp |
+|------|--------|-------------|---------|---------|
+| A: Baseline OG（16→128，无注意力） | 12.87K | 0.8851 | 0.9654 | 0.8049 |
+| B: + 加宽通道（32→256） | 47.23K | 0.8896 | 0.9595 | 0.8198 |
+| C: + CoordAtt + Dropout | 65.12K | 0.8869 | 0.9383 | 0.8355 |
+| D: + 残差连接 | 108.10K | 0.8912 | 0.9797 | 0.8027 |
+
+**最终选定 C 组**：Se/Sp 最平衡，训练最稳定（最佳 epoch=5 vs D 组的 2），适合医疗筛查场景。D 组虽 M-Score 最高但 Se/Sp 失衡加剧，不采用。详细分析见 MODEL_FINETUNE.md。
 
 ---
 
@@ -242,13 +246,24 @@ baseline CNN（无注意力）
 
 ## 待办
 
+### 诊断模型
 - [x] 修复 val_ds 数据集对象错误（`train_lightweight.py:188`）
-- [x] 诊断模型加类别平衡（WeightedRandomSampler 或 class weights）
+- [x] 诊断模型加类别平衡（WeightedRandomSampler）
 - [x] 划分并固定 test 集 → 导出 `test_split.csv`，锁住不动
 - [x] 模型保存标准改为 M-Score（Se + Sp）/ 2
-- [ ] ⏸️ 改模型架构（待第一次训练结果出来再决定方向）
-- [ ] 替换 `.tflite` 文件
+- [x] 消融实验完成（A/B/C/D 四组），最终选定 C 组（CoordAtt + Dropout，65.12K），不加残差
+- [x] 最终模型确定：Run 6（n_mels=64, hop=128, batch=16），Test M-Score=0.8903
+- [ ] 将 Run 6 的 `best_model.pth` 用 `scripts/convert_to_tflite.py` 转为 `.tflite`（FP32 + INT8）
+
+### SQA 模型
+- [x] 划分并固定 SQA test 集 → `data/test_split_sqa.csv`
+- [x] SQA Run-1 完成（Test M-Score=0.8046，Se=0.7173，Se 偏低）
+- [ ] SQA Run-2 训练中（class_weight=[1,8] + lr=5e-4 + scheduler patience=5）
+- [ ] SQA Run-2 完成后：用 `scripts/convert_to_tflite.py` 转为 `.tflite`
+- [ ] 替换 Pi 上的两个 `.tflite` 文件（诊断 + SQA）
+
+### Pi 端评估
 - [ ] Pi 上跑 `benchmark.py` 采延迟/资源数据
-- [ ] Pi 上跑 `evaluate.py` 采准确率数据
-- [ ] FP32 模型在训练项目那边跑出准确率，与 INT8 对比
+- [ ] Pi 上跑 `scripts/evaluate_tflite.py` 采准确率数据（FP32 vs INT8）
+- [ ] FP32 模型在训练端跑出准确率，与 Pi INT8 结果对比
 

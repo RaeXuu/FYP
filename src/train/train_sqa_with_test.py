@@ -40,11 +40,11 @@ else:
 from src.model.lightweight_cnn import LightweightCNN
 
 # === 训练参数 ===
-RUN_NAME = "SQA-run-1"   # <-- 每次改这里
+RUN_NAME = "SQA-run-2"   # <-- 每次改这里
 BATCH_SIZE = 16
 EPOCHS = 50
 EARLY_STOP_PATIENCE = 10
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 5e-4
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_PATH = os.path.join(PROJECT_ROOT, "checkpoints", "best_model_sqa.pth")
 
@@ -126,11 +126,12 @@ def main():
             "feature": FEATURE_TYPE,
             "batch_size": BATCH_SIZE,
             "epochs": EPOCHS,
-            "lr": LEARNING_RATE,
+            "lr": LEARNING_RATE,        # 5e-4（run-1 用 1e-3，振荡过大）
             "weight_decay": 1e-4,
-            "scheduler": "ReduceLROnPlateau(factor=0.5, patience=3)",
+            "scheduler": "ReduceLROnPlateau(factor=0.5, patience=5)",
             "split": "80/10/10",
             "sampler": "WeightedRandomSampler",
+            "loss_weight": "class_weight=[1.0, 8.0]",
             "save_criterion": "val_m_score",
             "label_convention": "bad=1(pos), good=0",
             **cfg,
@@ -209,9 +210,11 @@ def main():
                               num_workers=4, pin_memory=True, persistent_workers=True)
 
     model = LightweightCNN(num_classes=2).to(DEVICE)
-    criterion = nn.CrossEntropyLoss()
+    # class weight：bad(1) 权重=8，与 8:1 不平衡比对齐，强迫模型更重视差质量漏报
+    class_weight = torch.tensor([1.0, 8.0]).to(DEVICE)
+    criterion = nn.CrossEntropyLoss(weight=class_weight)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
 
     best_mscore = 0.0
     patience_counter = 0
