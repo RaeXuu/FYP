@@ -423,6 +423,51 @@ Early stop 触发于 Epoch 15
 
 ## SQA 模型（LightweightCNN）
 
+### 标签约定说明
+
+**原始 `metadata_quality.csv`（由 `load_quality.py` 生成）**
+
+| label | 含义 | 数量 |
+|-------|------|------|
+| 0 | 差质量（score == 0） | 364 |
+| 1 | 好质量（score != 0） | 2876 |
+
+**问题**：若直接使用原始 CSV，M-Score 的 Sensitivity = 召回 class 1 = 好质量检出率，与 SQA 的目标相反——我们想要的是**别漏掉差质量音频**，防止噪声送进诊断模型。
+
+**解决方案**：新生成 `metadata_quality_reversed.csv`（`flip_label=True`），反转标签：
+
+| label | 含义 | 数量 |
+|-------|------|------|
+| 0 | 好质量 | 2876 |
+| 1 | 差质量（正类） | 364 |
+
+这样 Sensitivity = 差质量检出率，与诊断模型的逻辑一致（正类 = 需要被检出的类）。
+
+- 生成脚本：`src/preprocess/load_quality.py`（`flip_label=True` 参数）
+- 训练使用：`metadata_quality_reversed.csv`
+
+---
+
+### 训练配置
+
+与诊断模型共用架构和超参，差异如下：
+
+| 项目 | 诊断模型 | SQA 模型 |
+|------|---------|---------|
+| 训练脚本 | `train_lightweight_with_test.py` | `train_sqa_with_test.py` |
+| metadata | `metadata_physionet.csv` | `metadata_quality_reversed.csv` |
+| 模型保存 | `checkpoints/best_model.pth` | `checkpoints/best_model_sqa.pth` |
+| test split | `data/test_split.csv` | `data/test_split_sqa.csv` |
+| class names | Normal(0) / Abnormal(1) | Good(0) / Bad(1) |
+| 类别不平衡 | 4:1 | 8:1 |
+| Se 定义 | abnormal 检出率 | 差质量检出率（pos_label=1） |
+| 架构 | LightweightCNN（CoordAtt，65.12K） | 相同 |
+| 超参 | batch=16, lr=1e-3, wd=1e-4 | 相同 |
+
+---
+
+### 训练结果
+
 *(待填)*
 
 ---
