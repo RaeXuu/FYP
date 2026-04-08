@@ -427,6 +427,138 @@ Early stop 触发于 Epoch 15
 
 ---
 
-## 消融实验
+## 消融实验（架构）
 
-*(待填 — 在 baseline 基础上逐步改动架构后记录)*
+### 实验设计
+
+**核心问题**：每个架构设计决策对最终 M-Score 的贡献是多少？
+
+**方法**：累进式消融（A→B→C→D），每步只加一个改动，逐步还原完整系统。
+
+**固定控制变量（所有组统一）**
+```
+数据集：同一份 test_split.csv（不可重新划分）
+预处理：n_mels=32, hop=96, n_fft=256, overlap=0.5（原始参数，不偏向任何架构）
+训练：batch=16, lr=1e-3, weight_decay=1e-4, 无 label smoothing
+Early stopping：patience=10, max epochs=50
+Scheduler：ReduceLROnPlateau(factor=0.5, patience=3)
+Sampler：WeightedRandomSampler
+```
+
+### 消融组合
+
+| 组 | 实验名 | 模型文件 | 通道 | CoordAtt | Dropout | 残差 | 状态 |
+|---|---|---|---|---|---|---|---|
+| A | Baseline OG | lightweight_cnn_og.py | 16→32→64→128 | 无 | 无 | 无 | 待跑 |
+| B | + 加宽通道 | lightweight_cnn_og_wide.py | 32→64→128→256 | 无 | 无 | 无 | 待跑 |
+| C | + CoordAtt + Dropout | lightweight_cnn.py | 32→64→128→256 | 有 | 0.3 | 无 | = Run 7 ✅ |
+| D | + 残差连接 | lightweight_cnn_res.py | 32→64→128→256 | 有 | 0.3 | 有 | 待跑 |
+
+> - A→B：验证通道容量的贡献
+> - B→C：验证 CoordAtt + Dropout 的贡献
+> - C→D：验证残差连接的贡献
+
+### 实施步骤
+
+1. **A 组**：import 改为 `LightweightCNN` from `lightweight_cnn_og`，config.yaml 用原始参数，跑一次
+2. **B 组**：新建 `lightweight_cnn_og_wide.py`，跑一次
+3. **C 组**：直接复用 Run 7 数据 ✅
+4. **D 组**：import 改为 `LightweightCNNRes` from `lightweight_cnn_res`，跑一次
+
+### 预期论文表格
+
+| 配置 | Test M-Score | Se | Sp | 参数量 |
+|------|-------------|----|----|--------|
+| A: Baseline OG（16→128，无注意力） | ? | ? | ? | ~20K |
+| B: + 加宽通道（32→256） | ? | ? | ? | ~65K |
+| C: + CoordAtt + Dropout | 0.8869 | 0.9383 | 0.8355 | ~85K |
+| D: + 残差连接（完整系统） | ? | ? | ? | ~108K |
+
+### 消融结果
+
+#### 组 A — Baseline OG（16→32→64→128，无 CoordAtt，无 Dropout）
+wandb: `Ablation-A-OG-baseline` | run: `fgjo8vul`
+
+| 指标 | Val 最优 | Test |
+|------|---------|------|
+| M-Score | 0.9113 | 0.8851 |
+| Sensitivity | 0.9683 | 0.9654 |
+| Specificity | 0.8544 | 0.8049 |
+
+Early stop Epoch 11，最佳 Epoch 1
+
+---
+
+#### 组 B — OG Wide（32→64→128→256，无 CoordAtt，无 Dropout）
+wandb: `Ablation-B-OG-wide` | run: `i2slxntb`
+
+| 指标 | Val 最优 | Test |
+|------|---------|------|
+| M-Score | 0.9103 | 0.8896 |
+| Sensitivity | 0.9507 | 0.9595 |
+| Specificity | 0.8698 | 0.8198 |
+
+Early stop Epoch 11，最佳 Epoch 1
+
+---
+
+#### 组 C — + CoordAtt + Dropout（= Run 7）
+| 指标 | Val 最优 | Test |
+|------|---------|------|
+| M-Score | 0.9163 | 0.8869 |
+| Sensitivity | 0.9487 | 0.9383 |
+| Specificity | 0.8838 | 0.8355 |
+
+Early stop Epoch 15，最佳 Epoch 5
+
+---
+
+#### 组 D — + 残差连接
+wandb: `Ablation-D-Residual` | run: `gcb10g0s`
+
+| 指标 | Val 最优 | Test |
+|------|---------|------|
+| M-Score | 0.9115 | 0.8912 |
+| Sensitivity | 0.9683 | 0.9797 |
+| Specificity | 0.8548 | 0.8027 |
+
+Early stop Epoch 12，最佳 Epoch 2
+
+---
+
+#### 论文表格（完整）
+
+输入：(1, 1, 32, 64)，输出：(1, 2)
+
+| 配置 | 参数量 | Test M-Score | Test Se | Test Sp | Test Acc | Test Loss | 最佳 epoch |
+|------|--------|-------------|---------|---------|----------|-----------|-----------|
+| A: OG（16→128） | 12.87K | 0.8851 | 0.9654 | 0.8049 | 0.8352 | 0.4127 | 1 |
+| B: + 加宽通道（32→256） | 47.23K | 0.8896 | 0.9595 | 0.8198 | 0.8462 | 0.3444 | 1 |
+| C: + CoordAtt + Dropout | 65.12K | 0.8869 | 0.9383 | 0.8355 | 0.8549 | 0.3491 | 5 |
+| D: + 残差连接 | 108.10K | **0.8912** | 0.9797 | 0.8027 | 0.8361 | 0.4117 | 2 |
+
+**分析**
+- A→B：加宽通道 +0.005 M-Score，Se/Sp 稍微平衡
+- B→C：CoordAtt + Dropout 使最佳 epoch 从 1 延迟到 5，训练更稳定，Sp 提升 +0.016；M-Score 略降（-0.003），贡献体现在泛化稳定性而非峰值数值
+- C→D：残差连接 M-Score 最高（+0.004），但 Se 飙至 0.9797 而 Sp 跌至 0.8027，Se/Sp 失衡加剧；最佳 epoch 退回到 2，说明残差加快收敛的同时也带来了更强的偏向性
+
+**结论**：D 组 M-Score 数值最优，但 C 组 Se/Sp 最平衡（Se=0.9383, Sp=0.8355），训练也最稳定。若优先考虑医疗筛查场景（高 Se）选 D；若优先 Se/Sp 均衡选 C。
+
+---
+
+### 封箱说明
+
+**最终选定架构**：C 组（`lightweight_cnn.py`，65.12K 参数）+ Run 6 超参（n_mels=64, hop=128）
+
+**已排除的改进方向**
+
+| 方法 | 分析 | 结论 |
+|---|---|---|
+| WeightedRandomSampler | 已在用，有效缓解 4:1 类别不平衡 | 保留 |
+| CrossEntropyLoss(weight=[1,4]) | 误分异常惩罚更重 → Se↑ Sp↓，加剧失衡 | 不采用 |
+| CrossEntropyLoss(weight=[4,1]) | 误分正常惩罚更重 → Sp↑ Se↓，牺牲筛查能力 | 不采用 |
+| label smoothing | Run 2 实验证明 M-Score 无明显提升，且降低 Se | 不采用 |
+| 阈值调整 | Run 1 阈值扫描最大收益 +0.0007，可忽略 | 不采用 |
+| 残差连接 | D 组 Se/Sp 失衡加剧，不适合筛查场景 | 不采用 |
+
+Se/Sp 失衡是 4:1 数据不平衡的固有问题，上述方法只在 Se 和 Sp 之间做取舍，无法同时提升两者，因此封箱。
