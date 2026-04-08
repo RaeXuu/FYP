@@ -48,7 +48,7 @@ from src.model.lightweight_cnn import LightweightCNN
 
 # === 训练参数 ===
 RUN_NAME = "diagnostic-dev"   # <-- 每次改这里
-BATCH_SIZE = 256
+BATCH_SIZE = 16
 EPOCHS = 50
 EARLY_STOP_PATIENCE = 10
 LEARNING_RATE = 1e-3
