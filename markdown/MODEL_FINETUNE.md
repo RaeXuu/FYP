@@ -122,6 +122,155 @@ EPOCHS: 25 → 50（实际第 16 epoch 触发 early stopping）
 
 ---
 
+### Sweep Run — 2026-04-08（Bayesian Hyperparameter Search，40 trials）
+
+**目标**：用 Bayesian 搜索找最佳预处理参数，固定后跑最终训练
+
+**搜索空间**
+```
+n_mels:      [32, 64]
+hop_length:  [64, 96, 128]
+n_fft:       [128, 256, 512]
+overlap:     [0.25, 0.5, 0.75]
+lr:          [1e-3, 5e-4, 3e-4]
+weight_decay:[1e-4, 1e-3]
+固定：batch_size=16, epochs=50, early_stop_patience=10
+优化目标：val/m_score（maximize）
+```
+
+**Top 3 结果**
+
+| 排名 | wandb Run | m_score | sensitivity | specificity | n_mels | hop_length | n_fft | overlap | lr | weight_decay |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | lyric-sweep-12 | 0.9033 | 0.9510 | 0.8556 | 64 | 128 | 256 | 0.75 | 1e-3 | 1e-3 |
+| 2 | happy-sweep-30 | 0.9031 | 0.9677 | 0.8386 | 64 | 96 | 256 | 0.75 | 1e-3 | 1e-3 |
+| 3 | eternal-sweep-20 | 0.9000 | 0.9539 | 0.8462 | 64 | 128 | 256 | 0.75 | 1e-3 | 1e-3 |
+
+**选定最佳参数（lyric-sweep-12）**
+```
+n_mels:      64
+hop_length:  128
+n_fft:       256  (win_length 同步为 256)
+overlap:     0.75
+lr:          1e-3
+weight_decay:1e-3
+```
+
+**规律分析**
+- `n_mels=64`、`n_fft=256`、`overlap=0.75`、`lr=1e-3` 在 top5 中反复出现，是稳定最优区域
+- `weight_decay=1e-3`（而非 `1e-4`）在 sweep runs 里更占优
+- 若优先 sensitivity，选 happy-sweep-30（se=0.9677）；综合 m_score 选 lyric-sweep-12
+
+---
+
+### Run 4 — 2026-04-08（无 label smoothing，有 early stopping）
+
+**相比 Run 2 的改动**
+```
+CrossEntropyLoss(label_smoothing=0.1) → CrossEntropyLoss()
+其余与 Run 2 相同（overlap=0.5, batch=256）
+```
+
+**Val 最优（Epoch ?）**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.9039 |
+| Sensitivity | 0.9514 |
+| Specificity | 0.8564 |
+
+**Test 集最终结果**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.8835 |
+| Sensitivity | 0.9544 |
+| Specificity | 0.8125 |
+| Accuracy | 0.8393 |
+| Test Loss | 0.4100 |
+
+Early stop 触发于 Epoch 14
+
+**与 Run 2 对比（唯一变量：去掉 label smoothing）**
+| 指标 | Run 2 (label smoothing) | Run 4 (无 label smoothing) | 变化 |
+|------|------------------------|---------------------------|------|
+| Test M-Score | 0.8816 | 0.8835 | +0.002 |
+| Test Se | 0.9181 | 0.9544 | +0.036 |
+| Test Sp | 0.8452 | 0.8125 | -0.033 |
+| Val M-Score (best) | 0.9106 | 0.9039 | -0.007 |
+
+**结论**：去掉 label smoothing 后 Se 大幅回升（+0.036），Sp 下降（-0.033），M-Score 基本持平。Se/Sp 失衡与 Run 1 相似，说明 label smoothing 是平衡 Se/Sp 的关键因素，但对 M-Score 影响极小。
+
+---
+
+### Run 3 — 2026-04-08（overlap=0.75 对照实验）
+
+**相比 Run 1/2 的改动**
+```
+config.yaml: overlap: 0.5 → 0.75
+DataLoader:  num_workers=4, pin_memory=True, persistent_workers=True
+其余参数与 Run 1 相同（n_mels=32, hop_length=96, n_fft=256, lr=1e-3, weight_decay=1e-4）
+```
+
+**目的**：单独验证 overlap=0.75 对泛化性能的影响，与 Run 1（test M-Score=0.8852）对比
+
+**DataLoader 优化说明**
+- `num_workers=4`：多进程并行 mel 计算，避免 GPU 等待 CPU
+- `pin_memory=True`：数据存锁页内存，加速 CPU→GPU 传输
+- `persistent_workers=True`：epoch 间保留 worker 进程，减少启动开销
+
+**wandb Run 名称**：`src/train/train_lightweight_with_test.py:117` → `name="..."` 字段
+
+**Val 最优（Epoch 6）**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.9070 |
+| Sensitivity | 0.9007 |
+| Specificity | 0.9133 |
+
+**Test 集最终结果**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.8828 |
+| Sensitivity | 0.9105 |
+| Specificity | 0.8551 |
+| Accuracy | 0.8655 |
+| Test Loss | 0.4080 |
+
+Early stop 触发于 Epoch 15
+
+**与 Run 2 对比（唯一变量：overlap 0.5→0.75）**
+| 指标 | Run 2 (overlap=0.5) | Run 3 (overlap=0.75) | 变化 |
+|------|---------------------|----------------------|------|
+| Test M-Score | 0.8816 | 0.8828 | +0.001 |
+| Test Se | 0.9181 | 0.9105 | -0.008 |
+| Test Sp | 0.8452 | 0.8551 | +0.010 |
+| Val M-Score (best) | 0.9106 | 0.9070 | -0.004 |
+
+**结论**：overlap=0.75 与 0.5 的 test M-Score 基本持平（差距 0.001，在误差范围内），Se/Sp 略有互换。高 overlap 没有带来明显提升，也没有变差。维持 overlap=0.75 或回退 0.5 均可，建议后续跑完整 sweep 参数（n_mels=64, hop=128）后再做最终决定。
+
+---
+
+### Sweep 跑完后的步骤
+
+1. **查最佳参数**
+   - 去 wandb → heart-sound-fyp → Sweeps → 按 `val/m_score` 排序
+   - 记录最佳 trial 的 `n_mels / hop_length / n_fft / overlap / lr / weight_decay`
+
+2. **更新 config.yaml**
+   - 把最佳预处理参数（`n_mels`、`hop_length`、`n_fft`、`overlap`）写入 `config.yaml`
+   - `lr` 和 `weight_decay` 写入 `train_lightweight_with_test.py` 的常量
+
+3. **加 mel 缓存（dataset_mel.py）**
+   - 问题：每个 epoch 在 `__getitem__` 里重复计算 mel，CPU 跑满、GPU 饿着
+   - 改动：第一次计算完存到 `data/mel_cache/`（约 180MB），之后直接读文件
+   - 注意：改完 config 参数后需删掉旧 cache 重新生成
+
+4. **跑最终训练**
+   - 脚本：`train_lightweight_with_test.py`
+   - 确认 `test_split.csv` 已存在（不要删，保证 test 集锁住）
+   - 记录结果到本文件
+
+---
+
 ## SQA 模型（LightweightCNN）
 
 *(待填)*

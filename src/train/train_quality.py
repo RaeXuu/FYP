@@ -22,7 +22,8 @@ from src.train.dataset.dataset_mel import HeartSoundMelDataset as Dataset
 from src.model.lightweight_cnn import LightweightCNN
 
 # === 2. 训练参数（完全对齐诊断模型） ===
-BATCH_SIZE = 16
+RUN_NAME = "sqa-model"   # <-- 每次改这里
+BATCH_SIZE = 256
 EPOCHS = 50
 EARLY_STOP_PATIENCE = 10
 LEARNING_RATE = 1e-3
@@ -76,7 +77,7 @@ def main():
 
     wandb.init(
         project="heart-sound-fyp",
-        name="sqa-model",
+        name=RUN_NAME,
         config={
             "model": "LightweightCNN",
             "feature": "mel",
@@ -152,14 +153,17 @@ def main():
     samples_weights = torch.tensor([weights[l] for l in train_labels])
     sampler = WeightedRandomSampler(weights=samples_weights, num_samples=len(samples_weights), replacement=True)
 
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, sampler=sampler)
-    val_loader   = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
-    test_loader  = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, sampler=sampler,
+                              num_workers=4, pin_memory=True, persistent_workers=True)
+    val_loader   = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False,
+                              num_workers=4, pin_memory=True, persistent_workers=True)
+    test_loader  = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False,
+                              num_workers=4, pin_memory=True, persistent_workers=True)
 
     # === 6. 训练循环（针对 Loss 优化的改动） ===
     model = LightweightCNN(num_classes=2).to(DEVICE)
     # 1. 使用标签平滑，防止过度拟合
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4) 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)
 

@@ -40,7 +40,8 @@ else:
 from src.model.lightweight_cnn import LightweightCNN
 
 # === 训练参数 ===
-BATCH_SIZE = 16
+RUN_NAME = "Run5-sweep-best-params"   # <-- 每次改这里
+BATCH_SIZE = 256
 EPOCHS = 50
 EARLY_STOP_PATIENCE = 10
 LEARNING_RATE = 1e-3
@@ -114,7 +115,7 @@ def main():
 
     wandb.init(
         project="heart-sound-fyp",
-        name="diagnostic-model",
+        name=RUN_NAME,
         config={
             "model": "LightweightCNN",
             "feature": FEATURE_TYPE,
@@ -202,12 +203,15 @@ def main():
     print(f"  class counts = {class_counts} | weights = {weights.round(4)}")
     # ==========================================================================
 
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, sampler=sampler)
-    val_loader   = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
-    test_loader  = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, sampler=sampler,
+                              num_workers=4, pin_memory=True, persistent_workers=True)
+    val_loader   = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False,
+                              num_workers=4, pin_memory=True, persistent_workers=True)
+    test_loader  = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False,
+                              num_workers=4, pin_memory=True, persistent_workers=True)
 
     model = LightweightCNN(num_classes=2).to(DEVICE)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)
 
