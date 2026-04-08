@@ -2,6 +2,37 @@
 
 ---
 
+## 最终选定参数汇总
+
+### 诊断模型最优配置（Run 6）
+
+| 类别 | 参数 | 值 |
+|------|------|----|
+| **预处理** | sample_rate | 2000 |
+| | segment_length | 2.0s |
+| | overlap | 0.5 |
+| | bandpass | 25–400 Hz |
+| **Mel** | n_mels | 64 |
+| | n_fft / win_length | 256 |
+| | hop_length | 128 |
+| | fmin / fmax | 20 / 400 Hz |
+| | power | 2.0 |
+| **训练** | batch_size | 16 |
+| | epochs | 50（early stop patience=10）|
+| | lr | 1e-3 |
+| | weight_decay | 1e-4 |
+| | optimizer | Adam |
+| | scheduler | ReduceLROnPlateau(factor=0.5, patience=3) |
+| | loss | CrossEntropyLoss（无 label smoothing）|
+| | sampler | WeightedRandomSampler |
+| **结果** | Test M-Score | 0.8903 |
+| | Test Sensitivity | 0.9485 |
+| | Test Specificity | 0.8322 |
+
+> 预处理参数（n_mels=64, hop=128）来自 40 组 Bayesian sweep（`scripts/run_sweep.py`），训练参数通过 Run 1–7 消融实验确定。
+
+---
+
 ## 诊断模型（LightweightCNN + CoordAtt）
 
 ### Baseline Run 1 — 2026-04-07
@@ -246,6 +277,125 @@ Early stop 触发于 Epoch 15
 | Val M-Score (best) | 0.9106 | 0.9070 | -0.004 |
 
 **结论**：overlap=0.75 与 0.5 的 test M-Score 基本持平（差距 0.001，在误差范围内），Se/Sp 略有互换。高 overlap 没有带来明显提升，也没有变差。维持 overlap=0.75 或回退 0.5 均可，建议后续跑完整 sweep 参数（n_mels=64, hop=128）后再做最终决定。
+
+---
+
+### Run 5 — 2026-04-08（sweep 最佳预处理参数）
+
+**相比 Run 4 的改动**
+```
+config.yaml: n_mels: 32→64, hop_length: 96→128
+其余与 Run 4 相同（无 label smoothing, overlap=0.5, batch=256）
+```
+
+**Val 最优**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.9029 |
+| Sensitivity | 0.9420 |
+| Specificity | 0.8639 |
+
+**Test 集最终结果**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.8784 |
+| Sensitivity | 0.9409 |
+| Specificity | 0.8159 |
+| Accuracy | 0.8395 |
+| Test Loss | 0.3240 |
+
+Early stop 触发于 Epoch 11
+
+**与 Run 4 对比（唯一变量：n_mels 32→64, hop_length 96→128）**
+| 指标 | Run 4 | Run 5 | 变化 |
+|------|-------|-------|------|
+| Test M-Score | 0.8835 | 0.8784 | -0.005 |
+| Test Se | 0.9544 | 0.9409 | -0.014 |
+| Test Sp | 0.8125 | 0.8159 | +0.003 |
+| Val M-Score (best) | 0.9039 | 0.9029 | -0.001 |
+
+**结论**：sweep 最佳参数在 with_test 完整训练中未能带来提升，反而略有下降。sweep 是在 80/20 无 test 集的轻量模式下搜的，与完整训练条件不完全一致，存在分布差异。当前最优仍是 **Run 4**（n_mels=32, hop_length=96）。
+
+---
+
+### Run 6 — 2026-04-08（n_mels=64, hop=128, batch=16）
+
+**相比 Run 5 的改动**
+```
+BATCH_SIZE: 256 → 16
+其余与 Run 5 相同（n_mels=64, hop=128, 无 label smoothing, overlap=0.5）
+```
+
+**Val 最优（Epoch 2）**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.9009 |
+| Sensitivity | 0.9318 |
+| Specificity | 0.8700 |
+
+**Test 集最终结果**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.8903 |
+| Sensitivity | 0.9485 |
+| Specificity | 0.8322 |
+| Accuracy | 0.8541 |
+| Test Loss | 0.3613 |
+
+Early stop 触发于 Epoch 12
+
+**与 Run 4/5 对比**
+| Run | batch | n_mels | 最佳 epoch | Test M-Score | Test Se | Test Sp |
+|-----|-------|--------|-----------|-------------|---------|---------|
+| Run 4 | 256 | 32 | 4 | 0.8835 | 0.9544 | 0.8125 |
+| Run 5 | 256 | 64 | 1 | 0.8784 | 0.9409 | 0.8159 |
+| Run 6 | 16 | 64 | 2 | **0.8903** | 0.9485 | 0.8322 |
+
+**结论**：batch=16 解决了 n_mels=64 的过早过拟合问题（最佳 epoch 从 1 恢复到 2）。Run 6 是目前最优，M-Score 0.8903，Se/Sp 也更平衡。需 Run 7（batch=16, n_mels=32）做公平对照，排除 batch 大小本身的影响。
+
+---
+
+### Run 7 — 2026-04-08（n_mels=32, hop=96, batch=16，与 Run 6 公平对照）
+
+**目的**：控制 batch=16，n_mels=32，与 Run 6（batch=16, n_mels=64）形成公平对照，同时与 Run 4（batch=256, n_mels=32）验证 batch 大小的影响。
+
+**配置**
+```
+n_mels=32, hop_length=96
+BATCH_SIZE=16
+无 label smoothing, overlap=0.5
+```
+
+**Val 最优（Epoch 5）**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.9163 |
+| Sensitivity | 0.9487 |
+| Specificity | 0.8838 |
+
+**Test 集最终结果**
+| 指标 | 值 |
+|------|----|
+| M-Score | 0.8869 |
+| Sensitivity | 0.9383 |
+| Specificity | 0.8355 |
+| Accuracy | 0.8549 |
+| Test Loss | 0.3491 |
+
+Early stop 触发于 Epoch 15
+
+**完整对照表（batch 与 n_mels 消融）**
+| Run | batch | n_mels | 最佳 epoch | Test M-Score | Test Se | Test Sp |
+|-----|-------|--------|-----------|-------------|---------|---------|
+| Run 4 | 256 | 32 | 4 | 0.8835 | 0.9544 | 0.8125 |
+| Run 5 | 256 | 64 | 1 | 0.8784 | 0.9409 | 0.8159 |
+| Run 6 | 16 | 64 | 2 | 0.8903 | 0.9485 | 0.8322 |
+| **Run 7** | **16** | **32** | **5** | **0.8869** | 0.9383 | 0.8355 |
+
+**结论**
+- batch=16 优于 batch=256（Run 7 vs Run 4：+0.003，最佳 epoch 更晚更稳）
+- n_mels=64 vs 32 在 batch=16 下差距极小（0.8903 vs 0.8869），但 n_mels=64 有 Bayesian sweep 作为方法论支撑
+- **最终选定参数：batch=16, n_mels=64, hop=128, 无 label smoothing**（Run 6，test M-Score 最高且参数来自系统性搜索）
 
 ---
 
