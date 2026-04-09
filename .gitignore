@@ -7,8 +7,8 @@ __pycache__/
 
 # --- Project data (large, private, unnecessary) ---
 data/*
-!data/test_split.csv
-!data/test_split_sqa.csv
+!*.csv
+
 models/
 
 # --- Jupyter ---
