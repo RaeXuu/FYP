@@ -58,7 +58,7 @@ def plot_mel(mel, sr=2000, title="Mel Spectrogram"):
     librosa.display.specshow(
         mel,
         sr=sr,
-        hop_length=64,
+        hop_length=128,
         x_axis='time',
         y_axis='mel',
         cmap='magma'

@@ -83,17 +83,17 @@ class LightweightCNN(nn.Module):
         # 后面几层通道数：32 -> 64 -> 128 -> 256
         self.layer2 = nn.Sequential(
             DepthwiseSeparableConv(32, 64),
-            nn.MaxPool2d(2)  # 32x64 -> 16x32
+            nn.MaxPool2d(2)  # 64x64 -> 32x32
         )
 
         self.layer3 = nn.Sequential(
             DepthwiseSeparableConv(64, 128),
-            nn.MaxPool2d(2)  # 16x32 -> 8x16
+            nn.MaxPool2d(2)  # 32x32 -> 16x16
         )
 
         self.layer4 = nn.Sequential(
             DepthwiseSeparableConv(128, 256),
-            nn.MaxPool2d(2)  # 8x16 -> 4x8
+            nn.MaxPool2d(2)  # 16x16 -> 8x8
         )
 
         self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
@@ -116,9 +116,9 @@ class LightweightCNN(nn.Module):
 
 
 if __name__ == "__main__":
-    # 模拟输入：BatchSize=2, 通道=1, Mel频带=32, 时间帧=64
+    # 模拟输入：BatchSize=2, 通道=1, Mel频带=64, 时间帧=64
     model = LightweightCNN(num_classes=2, in_channels=1)
-    x = torch.randn(2, 1, 32, 64) 
+    x = torch.randn(2, 1, 64, 64)
     out = model(x)
 
     print("输入形状:", x.shape)

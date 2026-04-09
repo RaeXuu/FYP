@@ -13,7 +13,7 @@ def bicoherence_2d(
     nfft: int = 256,
     seglen: int = 512,
     overlap: float = 0.5,
-    fmax_hz: float = 800.0,
+    fmax_hz: float = 400.0,
     out_size: int = 128,
 ):
     """
@@ -90,7 +90,7 @@ def bicoherence_2d(
 
 if __name__ == "__main__":
     # quick sanity check
-    fs = 4000
+    fs = 2000
     t = np.arange(0, 2.0, 1 / fs)
     x = np.sin(2 * np.pi * 80 * t) + 0.4 * np.sin(2 * np.pi * 160 * t)
     x += 0.05 * np.random.randn(len(x))

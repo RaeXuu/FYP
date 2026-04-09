@@ -63,10 +63,18 @@ if __name__ == "__main__":
     4. segment audio
     5. 转成 log-mel
     """
+    import yaml
     import pandas as pd
+    from pathlib import Path
     from src.preprocess.load_wav import load_wav
     from src.preprocess.filters import apply_bandpass
     from src.preprocess.segment import segment_audio
+
+    _cfg_path = Path(__file__).resolve().parents[2] / "config.yaml"
+    with open(_cfg_path, "r") as f:
+        _cfg = yaml.safe_load(f)
+    _data_cfg = _cfg["data"]
+    _mel_cfg = _cfg["mel"]
 
     df = pd.read_csv("/home/agiuser/FypProj/data/metadata_physionet.csv")
     path = df.iloc[0]["filepath"]
@@ -74,19 +82,19 @@ if __name__ == "__main__":
     print("测试样本:", path)
 
     # Step1: load wav
-    y, sr = load_wav(path, target_sr=2000)
+    y, sr = load_wav(path, target_sr=_data_cfg["sample_rate"])
 
     # Step2: bandpass
-    y = apply_bandpass(y, fs=sr, lowcut=25, highcut=400)
+    y = apply_bandpass(y, fs=sr)
 
     # Step3: segment
-    segments = segment_audio(y, sr=sr, segment_sec=2.0)
+    segments = segment_audio(y, sr=sr)
     seg = segments[0]  # 取第一段测试
 
     print("单段长度:", len(seg))
 
     # Step4: log-mel
-    mel = logmel_fixed_size(seg, sr=sr, target_shape=(32, 64))
+    mel = logmel_fixed_size(seg, sr=sr, mel_cfg=_mel_cfg, target_shape=(_mel_cfg["n_mels"], 64))
 
     print("Log-Mel shape:", mel.shape)
     print("Mel 测试完成 ✅")
