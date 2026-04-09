@@ -6,9 +6,9 @@ __pycache__/
 *.pyc
 
 # --- Project data (large, private, unnecessary) ---
-data/
+data/*
 !data/test_split.csv
-!data/quality_test_split.csv
+!data/test_split_sqa.csv
 models/
 
 # --- Jupyter ---
@@ -21,8 +21,7 @@ notebooks/.ipynb_checkpoints/
 *.npy
 *.pkl
 *.pt
-*.pth
-*.tflite
+
 
 # --- Zip archives / dataset packages ---
 *.zip
