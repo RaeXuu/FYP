@@ -1,7 +1,7 @@
 import os
 import sys
 import torch
-import ai_edge_torch
+import litert_torch as ai_edge_torch
 import tensorflow as tf
 
 # 1. 路径设置
