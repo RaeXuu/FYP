@@ -253,7 +253,7 @@ Test集：训练结束后加载最优模型跑一次，输出 M-Score
 - [x] 模型保存标准改为 M-Score（Se + Sp）/ 2
 - [x] 消融实验完成（A/B/C/D 四组），最终选定 C 组（CoordAtt + Dropout，65.12K），不加残差
 - [x] 最终模型确定：Run 6（n_mels=64, hop=128, batch=16），Test M-Score=0.8903
-- [ ] 将 Run 6 的 `best_model.pth` 用 `scripts/convert_to_tflite.py` 转为 `.tflite`（FP32 + INT8）
+- [x] 将 Run 6 的 `best_model.pth` 用 `scripts/convert_to_tflite.py` 转为 `.tflite`（FP32 + INT8）
 
 ### SQA 模型
 - [x] 划分并固定 SQA test 集 → `data/test_split_sqa.csv`
@@ -261,8 +261,8 @@ Test集：训练结束后加载最优模型跑一次，输出 M-Score
 - [x] SQA Run-2 完成（class_weight=[1,8] + lr=5e-4，Test Se=0.7651，M-Score=0.8102）
 - [x] SQA Run-3 完成（dropout=0.5，Test Se=0.8274，M-Score=0.8152）**← 最终选定**
 - [x] 阈值扫描不需要：部署机制为加权平均，P(Good) 直接作为权重，无二值阈值
-- [ ] 用 `scripts/convert_to_tflite.py` 将 Run-3 `best_model_sqa.pth` 转为 `.tflite`（FP32 + INT8）
-- [ ] 替换 Pi 上的两个 `.tflite` 文件（诊断 + SQA）
+- [x] 用 `scripts/convert_to_tflite.py` 将 Run-3 `best_model_sqa.pth` 转为 `.tflite`（FP32 + INT8）
+- [ ] 替换 Pi 上的四个 `.tflite` 文件（诊断 FP32/INT8 + SQA FP32/INT8）
 
 ### Pi 端评估
 - [ ] Pi 上跑 `benchmark.py` 采延迟/资源数据

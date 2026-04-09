@@ -762,3 +762,42 @@ Early stop Epoch 12，最佳 Epoch 2
 | 残差连接 | D 组 Se/Sp 失衡加剧，不适合筛查场景 | 不采用 |
 
 Se/Sp 失衡是 4:1 数据不平衡的固有问题，上述方法只在 Se 和 Sp 之间做取舍，无法同时提升两者，因此封箱。
+
+---
+
+## TFLite 转换记录
+
+### 转换结果
+
+| 文件 | 模型来源 | 大小 | 压缩率 |
+|------|---------|------|--------|
+| `heart_model_fp32.tflite` | 诊断模型（Run 6 重训，Final-diagnostic-model）| 303K | — |
+| `heart_model_quant.tflite` | 同上，INT8 动态范围量化 | 145K | 52% |
+| `heart_quality_fp32.tflite` | SQA 模型（Run 3）| 303K | — |
+| `heart_quality_quant.tflite` | 同上，INT8 动态范围量化 | 145K | 52% |
+
+转换时间：2026-04-09
+
+### 转换脚本
+
+`scripts/convert_to_tflite.py`，对每个 `.pth` 生成 FP32 和 INT8 两个 tflite 文件。
+
+### 依赖链与踩坑记录
+
+**原始链路**：`ai_edge_torch.convert()` → MLIR/StableHLO → TFLite
+
+**问题**：`ai_edge_torch` 在 2024 年底更名为 `litert_torch`，`ai_edge_torch 0.7.x` 与 torch 2.11.0 不兼容（`torch.ao.quantization.pt2e` 模块在 torch 2.5+ 被移除）。
+
+**解决过程**：
+1. 对 `ai_edge_torch/quantize/__init__.py` 和 `quant_config.py` 加 `try/except`，绕过 PT2E 量化模块的导入错误（PT2E 量化是 QAT 专用路径，我们用的是 TFLite 动态范围量化，不经过这条路）
+2. PyTorch 自动恢复了 `torch.ao.quantization.pt2e` 的实现（linter 注入），最终 import 恢复正常
+3. 安装 `litert_torch 0.8.0`，将脚本中 `import ai_edge_torch` 改为 `import litert_torch as ai_edge_torch`，接口完全兼容
+
+**最终工作环境**：
+```
+torch:        2.11.0+cu128
+litert-torch: 0.8.0
+tensorflow:   2.21.0-dev
+```
+
+**注意**：`litert_torch 0.8.0` 声明要求 `torch<2.10.0`，但实际在 torch 2.11.0 上可正常运行（仅有无害的 FutureWarning）。如果未来重新跑转换遇到 import 错误，检查 `ai_edge_torch/quantize/__init__.py` 的 try/except 是否还在。
