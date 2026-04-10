@@ -1,0 +1,24 @@
+// CNN Architecture
+digraph {
+	rankdir=LR
+	A [label="Input
+64x32x1"]
+	B [label="Conv 1
+64x32x32"]
+	C [label="Conv 2
+32x16x64"]
+	D [label="Conv 3
+16x8x128"]
+	E [label="Conv 4
+8x4x256"]
+	F [label="FC Layer
+1x1x256"]
+	G [label="Output
+(2 classes)"]
+	A -> B
+	B -> C
+	C -> D
+	D -> E
+	E -> F
+	F -> G
+}
