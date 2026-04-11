@@ -11,8 +11,8 @@ from matplotlib.patches import FancyBboxPatch
 plt.rcParams['font.family'] = 'serif'
 
 fig, ax = plt.subplots(figsize=(19, 7))
-ax.set_xlim(0, 19.5)
-ax.set_ylim(0, 7)
+ax.set_xlim(0, 15.5)
+ax.set_ylim(0, 6.5)
 ax.axis('off')
 
 # ── Colour palette (muted, harmonious) ───────────────────────────────────
@@ -60,10 +60,10 @@ IX, IW, IH = 1.0, 1.05, 3.1
 rbox(ax, IX, CY, IW, IH, C_INPUT_BG, ec='#888888', lw=1.5)
 txt(ax, IX, CY, 'Input\nLog-Mel\nSpectrogram', fs=11)
 ax.text(IX, CY - IH/2 - 0.15, 'Shape: (1 × 64 × 64)',
-        ha='center', va='top', fontsize=12, color='#444444')
+        ha='center', va='top', fontsize=12, color="#EC3131")
 
 # ── 1  Standard Convolution block ────────────────────────────────────────
-SX, SW, SH = 3.1, 1.6, 3.1
+SX, SW, SH = 2.8, 1.6, 3.1
 rbox(ax, SX, CY, SW, SH, '#d6eaf8', ec=C_CONV, lw=2, pad=0.03)
 section_header(ax, SX, CY + SH/2 + 0.08, 'Standard\nConvolution', C_CONV)
 
@@ -91,13 +91,13 @@ DSC_ROWS = [
     (C_MAXPOOL,  'Max Pooling',           '#1a2b3c'),
 ]
 
-BW, BH   = 1.7, 4.3
+BW, BH   = 1.6, 4.3
 ROW_H    = 0.48
 ROW_GAP  = 0.06
 N        = len(DSC_ROWS)
 ROWS_TOT = N * ROW_H + (N - 1) * ROW_GAP
 
-DSC_XS    = [5.4, 7.7, 10.0]
+DSC_XS    = [4.9, 7.0, 9.1]
 DSC_CHANS = [64, 128, 256]
 DSC_LABELS = [
     'Depthwise Separable\nConv Block 1',
@@ -123,7 +123,7 @@ arrow(ax, DSC_XS[0] + BW/2 + 0.05, DSC_XS[1] - BW/2 - 0.05)
 arrow(ax, DSC_XS[1] + BW/2 + 0.05, DSC_XS[2] - BW/2 - 0.05)
 
 # ── 5  Global Average Pooling ─────────────────────────────────────────────
-GX, GW, GH = 12.8, 1.55, 2.5
+GX, GW, GH = 11.1, 1.35, 2.2
 rbox(ax, GX, CY, GW, GH, C_GAP_BG, ec=C_GAP_BDR, lw=2, pad=0.03)
 section_header(ax, GX, CY + GH/2 + 0.08, 'Global\nAverage Pool', C_GAP_BDR)
 txt(ax, GX, CY + 0.38, 'Adaptive\nAvgPool2D', fs=12, color='#4a235a')
@@ -132,7 +132,7 @@ txt(ax, GX, CY - 0.38, '8×8  →  1×1', fs=12, color='#6a1e8a')
 arrow(ax, DSC_XS[2] + BW/2 + 0.05, GX - GW/2 - 0.05)
 
 # ── 6  Classification Head ────────────────────────────────────────────────
-CX2, CW2, CH2 = 15.2, 1.65, 2.9
+CX2, CW2, CH2 = 13.2, 1.65, 2.7
 rbox(ax, CX2, CY, CW2, CH2, C_CLS_BG, ec=C_CLS_BDR, lw=2, pad=0.03)
 section_header(ax, CX2, CY + CH2/2 + 0.08, 'Classification\nHead', C_CLS_BDR)
 
@@ -142,17 +142,17 @@ txt(ax, CX2, CY + 0.55, 'Dropout (0.3)', color='#5D4000', fs=11)
 rbox(ax, CX2, CY - 0.18, CW2 - 0.2, 0.54, C_FC, pad=0.04)
 txt(ax, CX2, CY - 0.18, 'Fully Connected', color='#1a5e20', fs=11)
 
-ax.text(CX2, CY - 0.72, 'Input: 256',  ha='center', va='center', fontsize=12, color='#555')
-ax.text(CX2, CY - 1.02, 'Output: 2',   ha='center', va='center', fontsize=12, color='#555')
+ax.text(CX2, CY - 0.72, 'Input: 256',  ha='center', va='center', fontsize=12, color='#EC3131')
+ax.text(CX2, CY - 1.02, 'Output: 2',   ha='center', va='center', fontsize=12, color='#EC3131')
 
 arrow(ax, GX + GW/2 + 0.05, CX2 - CW2/2 - 0.05)
 
 # ── 7  Output label ───────────────────────────────────────────────────────
-OX = CX2 + CW2/2 + 0.1
-arrow(ax, OX, OX + 0.85)
-ax.text(OX + 0.95, CY + 0.18, 'Normal',   ha='left', va='center',
+OX = CX2 + CW2/2 + 0.05
+arrow(ax, OX, OX + 0.5)
+ax.text(OX + 0.55, CY + 0.18, 'Normal',   ha='left', va='center',
         fontsize=12, color='#2E7D32', fontweight='bold')
-ax.text(OX + 0.95, CY - 0.18, 'Abnormal', ha='left', va='center',
+ax.text(OX + 0.55, CY - 0.18, 'Abnormal', ha='left', va='center',
         fontsize=12, color='#C62828', fontweight='bold')
 
 # ── Legend ────────────────────────────────────────────────────────────────
