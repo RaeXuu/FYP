@@ -51,7 +51,7 @@ axes[2].set_ylabel('Amplitude'); axes[2].set_xlabel('Time (s)')
 img = axes[3].imshow(log_mel, aspect='auto', origin='lower',
                      extent=[0, segment.shape[0]/SR, 0, N_MELS],
                      cmap='magma')
-axes[3].set_title('(d) Log-Mel spectrogram (32×64)')
+axes[3].set_title('(d) Log-Mel spectrogram (64×64)')
 axes[3].set_ylabel('Mel bin'); axes[3].set_xlabel('Time (s)')
 fig.colorbar(img, ax=axes[3], label='dB')
 

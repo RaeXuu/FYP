@@ -93,7 +93,7 @@ ax.text(1.05, 5.55, 'ESP32', ha='center', fontsize=12,
 ax.text(1.05, 5.1,  'Heart Sound\nSensor Node', ha='center',
         fontsize=8, color='#555', linespacing=1.4)
 # sub-items
-for i, t in enumerate(['Microphone', 'ADC sampling', 'BLE broadcast']):
+for i, t in enumerate(['INMP441(I\u00b2S)', 'I\u00b2S \u2192 2 kHz decimate', 'BLE broadcast']):
     ax.text(0.38, 5.0 - i * 0.62, f'• {t}',
             ha='left', va='top', fontsize=10, color='#444')
 
