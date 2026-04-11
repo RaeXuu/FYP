@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import yaml
 import ai_edge_litert.interpreter as tflite
-from sklearn.metrics import classification_report, recall_score
+from sklearn.metrics import classification_report, recall_score, confusion_matrix
 from torch.utils.data import Subset
 from pathlib import Path
 
@@ -75,12 +75,21 @@ def evaluate_single_tflite(model_path, subset, target_names):
     report = classification_report(all_labels, all_preds, target_names=target_names, output_dict=True, zero_division=0)
     
     # M-Score: 两个类别召回率的算术平均值
-    m_score = (recall_score(all_labels, all_preds, pos_label=0) + 
-               recall_score(all_labels, all_preds, pos_label=1)) / 2
+    se = recall_score(all_labels, all_preds, pos_label=1)
+    sp = recall_score(all_labels, all_preds, pos_label=0)
+    m_score = (se + sp) / 2
+
+    # 混淆矩阵：行=真实标签(0,1)，列=预测标签(0,1)
+    cm = confusion_matrix(all_labels, all_preds)
+    tn, fp, fn, tp = cm.ravel()
 
     return {
         "Accuracy": f"{report['accuracy']:.4f}",
         "M-Score": f"{m_score:.4f}",
+        "Se": f"{se:.4f}",
+        "Sp": f"{sp:.4f}",
+        "TP": int(tp), "FN": int(fn), "FP": int(fp), "TN": int(tn),
+        "n": len(all_labels),
         "Latency": f"{avg_latency:.2f}ms",
         "Size": f"{os.path.getsize(model_path)/(1024*1024):.2f}MB"
     }
@@ -99,8 +108,9 @@ def main():
             "split_csv": os.path.join(PROJECT_ROOT, "data/test_split.csv"),
             "labels": ['Normal', 'Abnormal'],
             "models": {
-                "Diag_FP32": os.path.join(PROJECT_ROOT, "heart_model_fp32.tflite"),
-                "Diag_INT8": os.path.join(PROJECT_ROOT, "heart_model_quant.tflite")
+                "Diag_FP32":      os.path.join(PROJECT_ROOT, "heart_model_fp32.tflite"),
+                "Diag_INT8":      os.path.join(PROJECT_ROOT, "heart_model_quant.tflite"),
+                "Diag_INT8full":  os.path.join(PROJECT_ROOT, "heart_model_int8full.tflite")
             }
         },
         {
@@ -109,8 +119,9 @@ def main():
             "split_csv": os.path.join(PROJECT_ROOT, "data/test_split_sqa.csv"),
             "labels": ['Good', 'Bad'],
             "models": {
-                "Qual_FP32": os.path.join(PROJECT_ROOT, "heart_quality_fp32.tflite"),
-                "Qual_INT8": os.path.join(PROJECT_ROOT, "heart_quality_quant.tflite")
+                "Qual_FP32":      os.path.join(PROJECT_ROOT, "heart_quality_fp32.tflite"),
+                "Qual_INT8":      os.path.join(PROJECT_ROOT, "heart_quality_quant.tflite"),
+                "Qual_INT8full":  os.path.join(PROJECT_ROOT, "heart_quality_int8full.tflite")
             }
         }
     ]
@@ -146,7 +157,7 @@ def main():
         print("\n" + "#"*90)
         print("🏆 FypProj 双阶段系统：FP32 vs INT8 综合性能对比报告")
         print("#"*90)
-        print(df[["Task", "Model", "Accuracy", "M-Score", "Latency", "Size"]].to_string(index=False))
+        print(df[["Task", "Model", "Accuracy", "M-Score", "Se", "Sp", "TN", "FP", "FN", "TP", "n", "Latency", "Size"]].to_string(index=False))
         print("#"*90)
 
 if __name__ == "__main__":

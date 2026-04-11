@@ -1,12 +1,12 @@
 """
-Confusion matrix figures using training machine test set results.
+Confusion matrix figures using training machine test set evaluation results.
 Run on Mac.
 
     python plot_confusion_matrix_trainpc.py
 
 Outputs:
-    confusion_matrix_diag_trainpc.pdf
-    confusion_matrix_sqa_trainpc.pdf
+    confusion_matrix_diag_trainpc.png
+    confusion_matrix_sqa_trainpc.png
 """
 
 import numpy as np
@@ -54,30 +54,32 @@ def plot_cm(cm, class_names, title, out_path):
     print(f"{out_path} 已保存")
 
 
-# ── Diagnostic model (Run 6, training machine test set) ────────────────────
-# n=288, Se=94.85%, Sp=83.22%, Acc=85.41%
-# n_abnormal=54, n_normal=234  →  TP=51, FN=3, TN=195, FP=39
+# ── Diagnostic model (evaluate_tflite.py, FP32, per-slice) ─────────────────
+# n=6273, Se=96.45%, Sp=80.25%, Acc=83.31%, M-Score=88.35%
+# n_abnormal=1184 (TP+FN), n_normal=5089 (TN+FP)
+# TN=4084, FP=1005, FN=42, TP=1142
 diag_cm = np.array([
-    [195, 39],   # True Normal:   TN=195, FP=39
-    [  3, 51],   # True Abnormal: FN=3,   TP=51
+    [4084, 1005],   # True Normal:   TN=4084, FP=1005
+    [  42, 1142],   # True Abnormal: FN=42,   TP=1142
 ])
 plot_cm(
     diag_cm,
     class_names=["Normal", "Abnormal"],
-    title="Diagnostic Model — Confusion Matrix\n(Run 6, test set, n=288)",
+    title="Diagnostic Model — Confusion Matrix\n(FP32, training machine, n=6273 slices)",
     out_path="confusion_matrix_diag_trainpc.png",
 )
 
-# ── SQA model (Run 3, training machine test set) ────────────────────────────
-# n=324, Se(Bad)=82.74%, Sp(Good)=80.21%, Acc=80.56%
-# n_bad=36, n_good=288  →  TP=30, FN=6, TN=231, FP=57
+# ── SQA model (evaluate_tflite.py, FP32, per-slice) ────────────────────────
+# n=6726, Se(Bad)=90.44%, Sp(Good)=71.91%, Acc=73.24%, M-Score=81.18%
+# n_bad=481 (TP+FN), n_good=6245 (TN+FP)
+# TN=4491, FP=1754, FN=46, TP=435
 sqa_cm = np.array([
-    [231, 57],  # True Good: TN=231, FP=57
-    [  6, 30],  # True Bad:  FN=6,   TP=30
+    [4491, 1754],  # True Good: TN=4491, FP=1754
+    [  46,  435],  # True Bad:  FN=46,   TP=435
 ])
 plot_cm(
     sqa_cm,
     class_names=["Good Quality", "Bad Quality"],
-    title="SQA Model — Confusion Matrix\n(Run 3, test set, n=324)",
+    title="SQA Model — Confusion Matrix\n(FP32, training machine, n=6726 slices)",
     out_path="confusion_matrix_sqa_trainpc.png",
 )

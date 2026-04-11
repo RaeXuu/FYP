@@ -54,32 +54,66 @@ def plot_cm(cm, class_names, title, out_path):
     print(f"{out_path} 已保存")
 
 
-# ── Diagnostic model (from evaluate.py output) ─────────────────────────────
-# evaluated=107, Se=97.9%, Sp=40.0%, Acc=65.4%
-# n_abnormal=47, n_normal=60
-# TP=46, FN=1, TN=24, FP=36
+# ── Diagnostic model (Pi 4B evaluate.py --mode diag, INT8, per-slice) ───────
+# evaluated=6273 slices, Se=91.7%, Sp=82.3%, Acc=84.1%, M-Score=87.0%
+# n_normal=5089 slices, n_abnormal=1184 slices
+# Se=91.7%  → TP=round(0.917×1184)=1086, FN=98
+# Sp=82.3%  → TN=round(0.823×5089)=4188, FP=901
 diag_cm = np.array([
-    [24, 36],   # True Normal:   TN=24, FP=36
-    [ 1, 46],   # True Abnormal: FN=1,  TP=46
+    [4188,  901],   # True Normal:   TN=4188, FP=901
+    [  98, 1086],   # True Abnormal: FN=98,   TP=1086
 ])
 plot_cm(
     diag_cm,
     class_names=["Normal", "Abnormal"],
-    title="Diagnostic Model — Confusion Matrix\n(INT8, Pi 4B, n=107 evaluated)",
+    title="Diagnostic Model — Confusion Matrix\n(INT8, Pi 4B, n=6273 slices)",
     out_path="confusion_matrix_diag.png",
 )
 
-# ── SQA model (from evaluate.py output) ────────────────────────────────────
-# evaluated=324, Se(Bad)=84.4%, Sp(Good)=80.1%, Acc=80.6%
-# n_bad=35, n_good=289
-# TP=30 (Bad correctly identified), FN=5, TN=232, FP=57
+# ── SQA model (Pi 4B evaluate.py --mode sqa, INT8) ─────────────────────────
+# evaluated=6726 slices, Se(Bad)=90.2%, Sp(Good)=73.7%, Acc=74.9%, M-Score=82.0%
+# TP=434, TN=4605, FP=1640, FN=47
 sqa_cm = np.array([
-    [232, 57],  # True Good: TN=232, FP=57
-    [  5, 30],  # True Bad:  FN=5,   TP=30
+    [4605, 1640],  # True Good: TN=4605, FP=1640
+    [  47,  434],  # True Bad:  FN=47,   TP=434
 ])
 plot_cm(
     sqa_cm,
     class_names=["Good Quality", "Bad Quality"],
-    title="SQA Model — Confusion Matrix\n(INT8, Pi 4B, n=324)",
+    title="SQA Model — Confusion Matrix\n(INT8, Pi 4B, n=6726 slices)",
     out_path="confusion_matrix_sqa.png",
+)
+
+# ── Coupled system: SQA-gated Diagnostic (Pi 4B --mode both, FP32) ──────────
+# evaluated=143/288 recordings (skipped=145 by SQA gate)
+# Se=100.0%, Sp=50.5%, Acc=67.8%, M-Score=75.3%
+# n_ab=50, n_nor=93
+# Se=100.0% → TP=50, FN=0
+# Sp=50.5%  → TN=round(0.505×93)=47, FP=46
+coupled_fp32_cm = np.array([
+    [47, 46],   # True Normal:   TN=47, FP=46
+    [ 0, 50],   # True Abnormal: FN=0,  TP=50
+])
+plot_cm(
+    coupled_fp32_cm,
+    class_names=["Normal", "Abnormal"],
+    title="Coupled System — Confusion Matrix\n(FP32, Pi 4B, n=143 recordings, skipped=145)",
+    out_path="confusion_matrix_coupled_fp32.png",
+)
+
+# ── Coupled system: SQA-gated Diagnostic (Pi 4B --mode both, INT8) ──────────
+# evaluated=142/288 recordings (skipped=146 by SQA gate)
+# Se=100.0%, Sp=50.0%, Acc=67.6%, M-Score=75.0%
+# n_ab=50, n_nor=92
+# Se=100.0% → TP=50, FN=0
+# Sp=50.0%  → TN=round(0.5×92)=46, FP=46
+coupled_int8_cm = np.array([
+    [46, 46],   # True Normal:   TN=46, FP=46
+    [ 0, 50],   # True Abnormal: FN=0,  TP=50
+])
+plot_cm(
+    coupled_int8_cm,
+    class_names=["Normal", "Abnormal"],
+    title="Coupled System — Confusion Matrix\n(INT8, Pi 4B, n=142 recordings, skipped=146)",
+    out_path="confusion_matrix_coupled_int8.png",
 )

@@ -370,24 +370,25 @@ To quantify the contribution of each architectural component, four model variant
 **Architecture selection.** Config C is selected as the final architecture. While D achieves the highest M-Score, its Se/Sp imbalance (0.177 gap) is worse than A (0.161) and substantially worse than C (0.103). In a home screening device where missed abnormal cases carry greater clinical risk than false alarms, Se is more important than Sp—but the magnitude of Sp degradation in D (0.8027, a 32.8% false alarm rate on normal recordings) is considered unacceptable for a practical device. Config C provides the best balance across all three criteria: Se/Sp balance, training stability, and parameter efficiency.
 
 ### 5.5 Quantization Impact
-- FP32 vs INT8 准确率对比
-- 模型大小对比
-- 推理延迟对比
 
-**Table 5.5: FP32 vs quantized model comparison.**
+Post-training quantization is applied to both models via dynamic range quantization (`tf.lite.Optimize.DEFAULT`), which statically converts all weight tensors from FP32 to INT8 at export time while leaving activations in floating point. The resulting INT8 models each occupy 144.7 KB on disk, a reduction of 52.2% from the 302.8 KB FP32 baseline—consistent with the expected weight-only compression ratio for this architecture.
+
+**Table 5.5: FP32 vs quantized model comparison (diagnostic model, Pi 4B, per-slice, n=6273).**
 
 | Metric | FP32 | Quantized (Dynamic Range INT8) | Change |
 |--------|:----:|:------------------------------:|:------:|
 | Model size | 302.8 KB | 144.7 KB | −52.2% |
-| Test M-Score | 68.9% | 68.9% | 0.0% |
-| Test Se | 97.9% | 97.9% | 0.0% |
-| Test Sp | 40.0% | 40.0% | 0.0% |
+| Test M-Score | 87.1% | 87.0% | −0.1% |
+| Test Se | 91.7% | 91.7% | 0.0% |
+| Test Sp | 82.4% | 82.3% | −0.1% |
 | Inference latency (Pi 4B) | 13.44 ms | 13.43 ms | −0.1% |
+
+Accuracy degradation is negligible: M-Score drops by only 0.1 percentage point (87.1% → 87.0%), Sensitivity is unchanged at 91.7%, and Specificity decreases by 0.1 points (82.4% → 82.3%). These differences are within the expected rounding variation of per-slice evaluation and do not represent a meaningful accuracy loss.
+
+The latency reduction is similarly marginal (13.44 ms → 13.43 ms, −0.1%). This is expected for dynamic range quantization, which compresses weights to INT8 at export time but leaves activations at float32 at runtime. The absence of statically-quantized activations means the ARM Cortex-A72 cannot execute true INT8 GEMM operations; the latency saving comes only from reduced memory bandwidth for weight loading, not from integer arithmetic acceleration. Full integer quantization—where both weights and activations are fixed at INT8—would be needed to realise arithmetic-level speedup.
 
 **Figure 5.10: FP32 vs INT8 model size comparison for diagnostic and SQA models.**
 ![Fig 5.10](photo-from-PC/fig6_3_model_size.png)
-
-> **Note for writing:** Dynamic range quantization only statically quantizes weights; activations are quantized at runtime per call. This means the latency reduction relative to FP32 may be modest compared to full INT8 quantization (where both weights and activations are fixed at INT8 and the hardware can execute true INT8 GEMM). If the benchmark shows limited speedup, this is the expected explanation—not a flaw in the implementation.
 
 ---
 
@@ -466,14 +467,16 @@ The bandpass filter and Log-Mel spectrogram are implemented as NumPy operations 
 
 **Realtime constraint.** Each 2-second segment must be fully processed before the next segment is complete, i.e., total per-segment latency must remain under 2,000 ms. At the ARM Cortex-A72 clock speed (1.5 GHz) and given the lightweight model size (65.12K parameters, 144.7 KB INT8), the total per-segment latency of 33.9 ms satisfies the real-time constraint with a margin of approximately 59×.
 
-**Table 6.3: Quantization accuracy impact on Pi 4B (diagnostic model, test split).**
+**Table 6.3: Quantization accuracy impact on Pi 4B (diagnostic model, decoupled, per-slice, n=6273).**
 
 | Metric | FP32 | INT8 | Change |
 |--------|:----:|:----:|:------:|
-| M-Score | 68.9% | 68.9% | 0.0% |
-| Sensitivity | 97.9% | 97.9% | 0.0% |
-| Specificity | 40.0% | 40.0% | 0.0% |
-| Accuracy | 65.4% | 65.4% | 0.0% |
+| M-Score | 87.1% | 87.0% | −0.1% |
+| Sensitivity | 91.7% | 91.7% | 0.0% |
+| Specificity | 82.4% | 82.3% | −0.1% |
+| Accuracy | 84.2% | 84.1% | −0.1% |
+
+Across all four metrics, INT8 quantization introduces at most 0.1 percentage point of degradation relative to the FP32 baseline evaluated on the same device. Sensitivity—the clinically critical metric for detecting abnormal recordings—is entirely unaffected. These results confirm that dynamic range quantization preserves diagnostic accuracy while reducing each model's storage footprint from 302.8 KB to 144.7 KB, enabling both models to be held simultaneously in the Pi's memory with a combined footprint under 300 KB.
 
 ### 6.4 User Interface
 
