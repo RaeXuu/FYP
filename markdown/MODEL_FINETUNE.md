@@ -801,3 +801,29 @@ tensorflow:   2.21.0-dev
 ```
 
 **注意**：`litert_torch 0.8.0` 声明要求 `torch<2.10.0`，但实际在 torch 2.11.0 上可正常运行（仅有无害的 FutureWarning）。如果未来重新跑转换遇到 import 错误，检查 `ai_edge_torch/quantize/__init__.py` 的 try/except 是否还在。
+
+---
+
+## TFLite 模型综合评估 — 2026-04-12
+
+**评估脚本**：`scripts/evaluate_tflite.py`
+
+**测试集**：
+- 诊断任务：`test_split.csv`，共 6273 个切片（总切片 62003，音频 2876 条）
+- 质量任务：`test_split_sqa.csv`，共 6726 个切片（总切片 68104，音频 3240 条）
+
+### FP32 vs INT8 综合性能对比
+
+| Task | Model | Accuracy | M-Score | Latency | Size |
+|------|-------|----------|---------|---------|------|
+| Diagnosis (疾病诊断) | Diag_FP32 | 0.8331 | 0.8835 | 1.11ms | 0.30MB |
+| Diagnosis (疾病诊断) | Diag_INT8 | 0.8336 | 0.8838 | 1.04ms | 0.14MB |
+| Quality (质量评估) | Qual_FP32 | 0.7324 | 0.8118 | 1.22ms | 0.30MB |
+| Quality (质量评估) | Qual_INT8 | 0.7330 | 0.8121 | 1.06ms | 0.14MB |
+
+### 结论
+
+- INT8 量化后精度**几乎无损**（M-Score 差距 ≤ 0.0003），属于正常量化误差范围
+- INT8 模型体积缩减约 **53%**（0.30MB → 0.14MB）
+- INT8 推理延迟降低约 **6–13%**（诊断 1.11ms→1.04ms，质量 1.22ms→1.06ms）
+- 综合来看，INT8 量化在保持性能的同时显著降低了资源占用，适合边缘部署

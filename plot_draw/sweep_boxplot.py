@@ -61,10 +61,9 @@ params = [
     ("weight_decay", "Weight decay"),
 ]
 
-fig, axes = plt.subplots(2, 3, figsize=(13, 7))
-axes = axes.flatten()
+fig, axes = plt.subplots(2, 3, figsize=(10, 5), sharey=True)
 
-for ax, (col, xlabel) in zip(axes, params):
+for idx, (ax, (col, xlabel)) in enumerate(zip(axes.flatten(), params)):
     if col not in df.columns or df[col].dropna().empty:
         ax.set_visible(False)
         continue
@@ -72,34 +71,36 @@ for ax, (col, xlabel) in zip(axes, params):
     groups = sorted(df[col].dropna().unique())
     data   = [df[df[col] == g]["M-Score"].dropna().values for g in groups]
 
-    bp = ax.boxplot(data, labels=[str(g) for g in groups], patch_artist=True,
-                    medianprops=dict(color='black', linewidth=1.5),
-                    boxprops=dict(facecolor='#AEC6CF', alpha=0.8),
-                    whiskerprops=dict(linewidth=1),
-                    capprops=dict(linewidth=1),
-                    flierprops=dict(marker='o', markersize=4, alpha=0.5))
+    ax.boxplot(data, labels=[str(g) for g in groups], patch_artist=True,
+               medianprops=dict(color='black', linewidth=1.5),
+               boxprops=dict(facecolor='#AEC6CF', alpha=0.8),
+               whiskerprops=dict(linewidth=1),
+               capprops=dict(linewidth=1),
+               flierprops=dict(marker='o', markersize=4, alpha=0.5))
 
     # jitter 散点
     for i, g in enumerate(groups, start=1):
         vals = df[df[col] == g]["M-Score"].dropna().values
         ax.scatter(np.random.normal(i, 0.04, len(vals)), vals,
-                   alpha=0.4, s=12, color='gray', zorder=3)
+                   alpha=0.4, s=10, color='gray', zorder=3)
 
     # 最优 run 红星
     if pd.notna(best.get(col)) and best[col] in groups:
         best_idx = groups.index(best[col]) + 1
         ax.plot(best_idx, best["M-Score"], '*', color='crimson',
-                markersize=11, zorder=5, label='Best run')
-        ax.legend(fontsize=8)
+                markersize=10, zorder=5, label='Best run')
+        ax.legend(fontsize=7.5, handletextpad=0.2)
 
-    ax.set_xlabel(xlabel, fontsize=9)
-    ax.set_ylabel('Val M-Score', fontsize=9)
-    ax.tick_params(axis='both', labelsize=8)
+    ax.set_xlabel(xlabel, fontsize=8.5)
+    # 只在最左列显示 ylabel，避免重复
+    if idx % 3 == 0:
+        ax.set_ylabel('Val M-Score', fontsize=8.5)
+    ax.tick_params(axis='both', labelsize=7.5)
     ax.grid(axis='y', alpha=0.35, linestyle='--')
     ax.spines[['top', 'right']].set_visible(False)
 
-fig.suptitle(f'Bayesian Sweep: M-Score Distribution by Hyperparameter (n={len(df)} runs)',
-             fontsize=10)
-plt.tight_layout()
+fig.suptitle(f'Bayesian Sweep: M-Score by Hyperparameter  (n={len(df)} runs)',
+             fontsize=9.5)
+plt.tight_layout(pad=0.8, h_pad=1.2, w_pad=0.8)
 plt.savefig('fig5_sweep_boxplot.png', dpi=300, bbox_inches='tight')
 print("\nfig5_sweep_boxplot.png 已保存")
