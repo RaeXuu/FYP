@@ -2,7 +2,7 @@ import wandb
 import matplotlib.pyplot as plt
 
 api = wandb.Api()
-run = api.run("xrjgoole-google/heart-sound-fyp/runs/4wt2qyzs")
+run = api.run("xrjgoole-google/heart-sound-fyp/ogymmyh3")
 
 df = run.history(keys=["epoch", "train/loss", "val/m_score"], pandas=True)
 df = df.dropna(subset=["train/loss", "val/m_score"]).sort_values("_step")
@@ -37,5 +37,5 @@ lines2, labels2 = ax2.get_legend_handles_labels()
 ax1.legend(lines1 + lines2, labels1 + labels2, loc='center right')
 ax1.grid(alpha=0.3)
 plt.tight_layout()
-plt.savefig('fig5_1_training_curve.png', dpi=300, bbox_inches='tight')
-print("fig5_1_training_curve.pdf 已保存")
+plt.savefig('fig5_7_Run3_training_curve.png', dpi=300, bbox_inches='tight')
+print("fig5_7_Run3_training_curve.pdf 已保存")
