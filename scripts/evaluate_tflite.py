@@ -47,14 +47,31 @@ def evaluate_single_tflite(model_path, subset, target_names):
 
     interpreter = tflite.Interpreter(model_path=model_path)
     interpreter.allocate_tensors()
-    
-    input_idx = interpreter.get_input_details()[0]['index']
-    output_idx = interpreter.get_output_details()[0]['index']
-    
+
+    input_info  = interpreter.get_input_details()[0]
+    output_info = interpreter.get_output_details()[0]
+    input_idx   = input_info['index']
+    output_idx  = output_info['index']
+
+    input_dtype  = input_info['dtype']
+    output_dtype = output_info['dtype']
+    is_int8_in  = input_dtype in (np.int8, np.uint8)
+    is_int8_out = output_dtype in (np.int8, np.uint8)
+
+    model_tag = os.path.basename(model_path)
+    print(f"🚀 正在推理: {model_tag} (样本数: {len(subset)}, "
+          f"输入: {input_dtype.__name__ if hasattr(input_dtype, '__name__') else input_dtype}, "
+          f"输出: {output_dtype.__name__ if hasattr(output_dtype, '__name__') else output_dtype})")
+
+    input_scale, input_zp = (0.0, 0)
+    output_scale, output_zp = (0.0, 0)
+    if is_int8_in:
+        input_scale, input_zp = input_info['quantization']
+    if is_int8_out:
+        output_scale, output_zp = output_info['quantization']
+
     all_preds, all_labels, latencies = [], [], []
 
-    print(f"🚀 正在推理: {os.path.basename(model_path)} (样本数: {len(subset)})")
-    
     for i in range(len(subset)):
         mel, label = subset[i]
         input_data = mel.numpy()
@@ -62,11 +79,24 @@ def evaluate_single_tflite(model_path, subset, target_names):
         if input_data.ndim == 3:
             input_data = np.expand_dims(input_data, axis=0)
 
+        # INT8 输入：手动量化
+        if is_int8_in:
+            input_q = (input_data / input_scale + input_zp)
+            input_q = np.clip(input_q, -128, 127).astype(np.int8)
+        else:
+            input_q = input_data.astype(np.float32)
+
         start_time = time.perf_counter()
-        interpreter.set_tensor(input_idx, input_data)
+        interpreter.set_tensor(input_idx, input_q)
         interpreter.invoke()
-        output_data = interpreter.get_tensor(output_idx)
+        output_raw = interpreter.get_tensor(output_idx)
         latencies.append(time.perf_counter() - start_time)
+
+        # INT8 输出：手动反量化
+        if is_int8_out:
+            output_data = (output_raw.astype(np.float32) - output_zp) * output_scale
+        else:
+            output_data = output_raw
 
         all_preds.append(np.argmax(output_data))
         all_labels.append(label)

@@ -1,7 +1,5 @@
 import os
 import sys
-import shutil
-import tempfile
 import yaml
 import numpy as np
 import torch
@@ -40,10 +38,10 @@ def collect_calibration_npy(metadata_path, cfg, n=N_CALIB_SAMPLES, seed=42):
 
 def convert_model(task_name, pth_path, output_prefix, metadata_path, cfg):
     """
-    转换单个模型：
+    转换单个模型（全部通过 litert_torch 原生路径）：
       1. FP32（已有则跳过）
       2. 动态范围量化 INT8（已有则跳过）
-      3. 全整数量化 INT8 via PyTorch → ONNX → onnx2tf（输出 _int8full.tflite）
+      3. 全整型量化 INT8（via litert_torch _ai_edge_converter_flags）
     """
     print(f"\n{'='*50}")
     print(f"📦 正在处理模型任务: {task_name.upper()}")
@@ -61,7 +59,7 @@ def convert_model(task_name, pth_path, output_prefix, metadata_path, cfg):
     model.load_state_dict(torch.load(pth_path, map_location='cpu'))
     model.eval()
 
-    # --- 转换 1: FP32（已有则跳过） ---
+    # ─── 转换 1: FP32（已有则跳过） ───
     fp32_output = f"{output_prefix}_fp32.tflite"
     if not os.path.exists(fp32_output):
         print(f"🚀 正在生成 FP32 模型: {os.path.basename(fp32_output)}...")
@@ -70,7 +68,7 @@ def convert_model(task_name, pth_path, output_prefix, metadata_path, cfg):
     else:
         print(f"⏭️  FP32 已存在，跳过: {os.path.basename(fp32_output)}")
 
-    # --- 转换 2: 动态范围量化 INT8（已有则跳过） ---
+    # ─── 转换 2: 动态范围量化 INT8（已有则跳过） ───
     quant_output = f"{output_prefix}_quant.tflite"
     if not os.path.exists(quant_output):
         print(f"🚀 正在生成动态量化模型: {os.path.basename(quant_output)}...")
@@ -86,110 +84,46 @@ def convert_model(task_name, pth_path, output_prefix, metadata_path, cfg):
     else:
         print(f"⏭️  动态量化已存在，跳过: {os.path.basename(quant_output)}")
 
-    # --- 转换 3: 全整数量化 via ONNX → onnx2tf → TFLite ---
+    # ─── 转换 3: 全整型量化 INT8（已有则跳过） ───
     int8full_output = f"{output_prefix}_int8full.tflite"
-    print(f"🚀 正在生成全整数量化模型: {os.path.basename(int8full_output)}...")
+    if os.path.exists(int8full_output):
+        os.remove(int8full_output)  # 删除旧文件，确保重新生成
+
+    print(f"🚀 正在生成全整型量化模型: {os.path.basename(int8full_output)}...")
 
     try:
-        import onnx
-        import onnx2tf
-        from src.model.lightweight_cnn import CoordAtt  # 导入原始类
+        # 1. 收集校准数据
+        calib = collect_calibration_npy(metadata_path, cfg)  # (N, 1, 64, 64)
+        if calib is None or len(calib) == 0:
+            raise RuntimeError("校准数据为空")
 
-        # ── Patch：导出专用的 CoordAtt，expand_as 消除歧义形状 ──────────────
-        class _CoordAttExport(CoordAtt):
-            """ONNX 导出专用：a_h/a_w 显式 expand，形状统一，onnx2tf 不再困惑"""
-            def forward(self, x):
-                identity = x
-                n, c, h, w = x.size()
-                x_h = self.pool_h(x)
-                x_w = self.pool_w(x).permute(0, 1, 3, 2)
-                y = torch.cat([x_h, x_w], dim=2)
-                y = self.act(self.bn1(self.conv1(y)))
-                x_h, x_w = torch.split(y, [h, w], dim=2)
-                x_w = x_w.permute(0, 1, 3, 2)
-                a_h = torch.sigmoid(self.conv_h(x_h)).expand_as(identity)
-                a_w = torch.sigmoid(self.conv_w(x_w)).expand_as(identity)
-                return identity * a_h * a_w
+        # 2. 代表数据集生成器（喂给 TFLite converter 做校准）
+        def rep_dataset():
+            for i in range(len(calib)):
+                sample = calib[i:i+1].astype(np.float32)  # (1, 1, 64, 64)
+                yield [sample]
 
-        # 替换模型内所有 CoordAtt 模块为导出版
-        def _patch_coordatt(module):
-            for name, child in module.named_children():
-                if type(child) is CoordAtt:
-                    new_child = _CoordAttExport.__new__(_CoordAttExport)
-                    new_child.__dict__ = child.__dict__
-                    setattr(module, name, new_child)
-                else:
-                    _patch_coordatt(child)
+        # 3. 通过 _ai_edge_converter_flags 传递全整型量化参数
+        #    litert_torch 会将这些 flags 透传给底层的 TFLiteConverter
+        edge_model_int8 = ai_edge_torch.convert(
+            model, (sample_input,),
+            _ai_edge_converter_flags={
+                "optimizations": [tf.lite.Optimize.DEFAULT],
+                "representative_dataset": rep_dataset,
+                "target_spec": {
+                    "supported_ops": [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+                },
+                "inference_input_type": tf.int8,
+                "inference_output_type": tf.int8,
+            }
+        )
+        edge_model_int8.export(int8full_output)
 
-        _patch_coordatt(model)
-        # ─────────────────────────────────────────────────────────────────────
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            onnx_path      = os.path.join(tmpdir, "model.onnx")
-            calib_path     = os.path.join(tmpdir, "calib.npy")
-            saved_model_dir = os.path.join(tmpdir, "saved_model")
-
-            # 1. PyTorch (patched) → ONNX
-            print("  [1/3] PyTorch(patched) → ONNX...")
-            torch.onnx.export(
-                model, sample_input, onnx_path,
-                input_names=["input"], output_names=["output"],
-                opset_version=18, dynamic_axes=None,
-            )
-
-            # 2. 校准数据
-            print("  [2/3] 收集校准数据...")
-            calib = collect_calibration_npy(metadata_path, cfg)
-            np.save(calib_path, calib)
-
-            # 3. onnx2tf → SavedModel
-            print("  [3a/3] onnx2tf → SavedModel...")
-            onnx2tf.convert(
-                input_onnx_file_path=onnx_path,
-                output_folder_path=saved_model_dir,
-                output_integer_quantized_tflite=False,
-                not_use_onnxsim=True,
-                disable_strict_mode=True,
-                verbosity="warn",
-            )
-
-            # 4. SavedModel → TFLite 全整数量化
-            print("  [3b/3] TFLiteConverter 全整数量化...")
-            calib_data = np.load(calib_path)  # (N,1,64,64)
-
-            # 找 SavedModel 输入形状（onnx2tf 转成 NHWC）
-            import tensorflow as tf
-            saved = tf.saved_model.load(saved_model_dir)
-            infer = saved.signatures["serving_default"]
-            input_key = list(infer.structured_input_signature[1].keys())[0]
-            input_shape = infer.structured_input_signature[1][input_key].shape.as_list()
-            print(f"  SavedModel 输入形状: {input_shape}  key: {input_key}")
-
-            def rep_dataset():
-                for i in range(len(calib_data)):
-                    s = calib_data[i]  # (1, 64, 64)
-                    if len(input_shape) == 4 and input_shape[-1] == 1:
-                        # NHWC: (1, 64, 64, 1)
-                        s = np.transpose(s, (1, 2, 0))[np.newaxis].astype(np.float32)
-                    else:
-                        s = s[np.newaxis].astype(np.float32)
-                    yield [s]
-
-            converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_dir)
-            converter.optimizations = [tf.lite.Optimize.DEFAULT]
-            converter.representative_dataset = rep_dataset
-            converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
-            converter.inference_input_type  = tf.float32
-            converter.inference_output_type = tf.float32
-            tflite_bytes = converter.convert()
-
-            with open(int8full_output, "wb") as f:
-                f.write(tflite_bytes)
-            size_mb = os.path.getsize(int8full_output) / (1024 * 1024)
-            print(f"✅ 全整数量化完成！大小: {size_mb:.2f}MB → {os.path.basename(int8full_output)}")
+        size_mb = os.path.getsize(int8full_output) / (1024 * 1024)
+        print(f"✅ 全整型量化完成！大小: {size_mb:.2f}MB → {os.path.basename(int8full_output)}")
 
     except Exception as e:
-        print(f"❌ 全整数量化失败: {e}")
+        print(f"❌ 全整型量化失败: {e}")
         import traceback; traceback.print_exc()
 
 
