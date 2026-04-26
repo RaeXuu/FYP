@@ -4,16 +4,11 @@ import PackageDescription
 let package = Package(
     name: "SonoEdge",
     platforms: [.iOS(.v16)],
-    dependencies: [
-        .package(url: "https://github.com/tensorflow/tensorflow.git",
-                 from: "2.16.0"),
-    ],
+    dependencies: [],
     targets: [
         .executableTarget(
             name: "SonoEdge",
-            dependencies: [
-                .product(name: "TensorFlowLiteSwift", package: "tensorflow"),
-            ],
+            dependencies: [],
             path: "Sources",
             resources: [
                 .copy("Models/heart_quality_int8full.tflite"),
