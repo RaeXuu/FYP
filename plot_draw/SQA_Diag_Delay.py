@@ -4,9 +4,9 @@ import numpy as np
 plt.rcParams["font.family"] = "serif"
 
 stages = ["Bandpass filter", "Log-Mel spectrogram", "SQA model", "Diagnostic model"]
-fp32     = [2.24, 4.73, 14.2, 14.1]
-int8_dyn = [2.24, 4.73, 13.8, 13.8]
-int8_full= [2.24, 4.73,  8.7,  8.7]
+fp32     = [2.24, 4.73, 14.18, 14.15]
+int8_dyn = [2.24, 4.73, 13.80, 13.83]
+int8_full = [2.24, 4.73, 8.68, 8.69]
 
 colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
 
@@ -23,14 +23,14 @@ rows = [
 for row_idx, (yi, data, label) in enumerate(rows):
     left = 0
     for i, stage in enumerate(stages):
-        bar = ax.barh(yi, data[i], h, left=left, color=colors[i],
-                      label=stage if row_idx == 0 else "", zorder=3)
+        ax.barh(yi, data[i], h, left=left, color=colors[i],
+                label=stage if row_idx == 0 else "", zorder=3)
         if data[i] > 1.0:
             ax.text(left + data[i] / 2, yi, f"{data[i]:.2f}",
                     ha="center", va="center", fontsize=7, color="white", fontweight="bold")
         left += data[i]
     total = sum(data)
-    ax.text(left + 0.3, yi, f"{total:.1f} ms",
+    ax.text(left + 0.3, yi, f"{total:.2f} ms",
             va="center", fontsize=8, color="#333333")
 
 ax.set_yticks(y)
