@@ -55,13 +55,13 @@ def plot_cm(cm, class_names, title, out_path):
 
 
 # ── Diagnostic model (Pi 4B evaluate.py --mode diag, INT8, per-slice) ───────
-# evaluated=6273 slices, Se=91.7%, Sp=82.3%, Acc=84.1%, M-Score=87.0%
+# evaluated=6273 slices
 # n_normal=5089 slices, n_abnormal=1184 slices
-# Se=91.7%  → TP=round(0.917×1184)=1086, FN=98
-# Sp=82.3%  → TN=round(0.823×5089)=4188, FP=901
+# Se=%  → TP=round(0.917×1184)=1141, FN=43
+# Sp=%  → TN=round(0.823×5089)=4081, FP=1008
 diag_cm = np.array([
-    [4188,  901],   # True Normal:   TN=4188, FP=901
-    [  98, 1086],   # True Abnormal: FN=98,   TP=1086
+    [4081,  1008],   # True Normal:   TN=4081, FP=1008
+    [  43, 1141],   # True Abnormal: FN=43,   TP=1141
 ])
 plot_cm(
     diag_cm,
@@ -72,10 +72,10 @@ plot_cm(
 
 # ── SQA model (Pi 4B evaluate.py --mode sqa, INT8) ─────────────────────────
 # evaluated=6726 slices, Se(Bad)=90.2%, Sp(Good)=73.7%, Acc=74.9%, M-Score=82.0%
-# TP=434, TN=4605, FP=1640, FN=47
+# TP=433, TN=4498, FP=1640, FN=48
 sqa_cm = np.array([
-    [4605, 1640],  # True Good: TN=4605, FP=1640
-    [  47,  434],  # True Bad:  FN=47,   TP=434
+    [4498, 1747],  # True Good: TN=4498, FP=1640
+    [  48,  433],  # True Bad:  FN=48,   TP=433
 ])
 plot_cm(
     sqa_cm,
